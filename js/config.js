@@ -30,6 +30,30 @@ export const MAX_PATH_ACCEL = 60; // m/s² cap on that aerodynamic alignment
 export const PITCH_RATE = 1.15;  // rad/s
 export const ROLL_RATE = 2.40;   // rad/s
 export const YAW_RATE = 0.70;    // rad/s
+
+/* ---- aerodynamics (lift, drag, angle of attack) -------------------- */
+export const RHO_SEA = 1.225;     // kg/m³, sea-level air density
+export const SCALE_HEIGHT = 8500; // m, exponential decay of air density with altitude
+export const WING_AREA = 16.2;    // m², planform area
+export const WING_SPAN = 10.9;    // m
+export const CL_ALPHA = 5.2;      // 1/rad, lift slope before the stall
+export const CL_MAX = 1.35;       // peak lift coefficient
+export const ALPHA_STALL = 0.30;  // rad (~17°), angle of attack where lift peaks
+export const CD0 = 0.028;         // parasitic drag coefficient
+export const OSWALD = 0.78;       // span efficiency for induced drag
+
+/* ---- rotational dynamics ------------------------------------------- */
+// Moments are N·m. Damping and stability terms are scaled by dynamic
+// pressure in kPa, so control power falls off at low speed and rises with it.
+export const INERTIA = { pitch: 9000, roll: 6000, yaw: 11000 }; // kg·m²
+export const ELEVATOR_AUTH = 1.0; // elevator effectiveness scale
+export const AILERON_AUTH = 1.0;  // aileron effectiveness scale
+export const RUDDER_AUTH = 1.0;   // rudder effectiveness scale
+export const PITCH_DAMP = 5000;   // N·m·s/rad per kPa — sets the pitch response time
+export const ROLL_DAMP = 4000;    // N·m·s/rad per kPa
+export const YAW_DAMP = 6000;     // N·m·s/rad per kPa
+export const STABILITY_PITCH = 2000; // N·m/rad per kPa — nose returns to the flight path
+export const STABILITY_YAW = 1600;   // N·m/rad per kPa — weathervane into the relative wind
 export const THROTTLE_RATE = 0.55; // per second
 export const CONTROL_SMOOTHING = 9; // input ramp, higher = snappier
 export const EYE_HEIGHT = 1.15;  // cockpit eye, above the aircraft's origin

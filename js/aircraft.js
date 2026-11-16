@@ -15,6 +15,8 @@ import {
   MASS, MAX_THRUST, DRAG, GRAVITY, CLIMB_PENALTY, STALL_SPEED, SAG_RATE,
   LIFT_CAP, PATH_ALIGN, MAX_PATH_ACCEL,
   PITCH_RATE, ROLL_RATE, YAW_RATE, THROTTLE_RATE,
+  RHO_SEA, SCALE_HEIGHT, INERTIA, ELEVATOR_AUTH, AILERON_AUTH, RUDDER_AUTH,
+  PITCH_DAMP, ROLL_DAMP, YAW_DAMP, STABILITY_PITCH, STABILITY_YAW,
   CONTROL_SMOOTHING, START, START_SPEED, START_THROTTLE,
   GEAR_RATE, GEAR_DRAG, GEAR_HEIGHT,
   LANDING_MAX_DESCENT, LANDING_MAX_SPEED, LANDING_MAX_BANK, LANDING_MAX_ALIGN,
@@ -45,7 +47,8 @@ export class Aircraft {
 
     this.orientation = { x: 0, y: 0, z: 0, w: 1 };
     this.throttle = START_THROTTLE;
-    this.rates = { pitch: 0, roll: 0, yaw: 0 };
+    this.omega = { pitch: 0, roll: 0, yaw: 0 };       // body rates, rad/s
+    this.surfaces = { pitch: 0, roll: 0, yaw: 0 };    // smoothed control deflections
     this.elapsed = 0;
 
     this.state = STATE.AIR;
@@ -132,17 +135,44 @@ export class Aircraft {
   }
 
   #updateAir(dt, axes) {
-    /* --- control rates, smoothed so taps don't jolt --- */
+    /* --- control surfaces, smoothed so taps don't jolt --- */
     const slew = 1 - Math.exp(-CONTROL_SMOOTHING * dt);
-    this.rates.pitch += (axes.pitch * PITCH_RATE - this.rates.pitch) * slew;
-    this.rates.roll  += (axes.roll  * ROLL_RATE  - this.rates.roll)  * slew;
-    this.rates.yaw   += (axes.yaw   * YAW_RATE   - this.rates.yaw)   * slew;
+    this.surfaces.pitch += (axes.pitch - this.surfaces.pitch) * slew;
+    this.surfaces.roll  += (axes.roll  - this.surfaces.roll)  * slew;
+    this.surfaces.yaw   += (axes.yaw   - this.surfaces.yaw)   * slew;
 
-    /* --- attitude: body X = pitch up, body Z = roll right, body Y = yaw right */
+    /* --- rotational dynamics: moments → angular acceleration → body rates --- */
+    const altitude = Math.max(0, this.position.y);
+    const rho = RHO_SEA * Math.exp(-altitude / SCALE_HEIGHT);
+    const qbar = clamp((0.5 * rho * this.body.speed ** 2) / 1000, 0.2, 15); // kPa
+
+    const v = this.body.velocity;
+    const vSpeed = Math.max(this.body.speed, 1e-3);
+    const flightPath = Math.asin(clamp(v.y / vSpeed, -1, 1));
+    const sideslip = Math.atan2(
+      v.x * this.right.x + v.y * this.right.y + v.z * this.right.z,
+      v.x * this.forward.x + v.y * this.forward.y + v.z * this.forward.z,
+    );
+
+    const w = this.omega;
+    const momentPitch =
+      qbar * PITCH_DAMP * (PITCH_RATE * ELEVATOR_AUTH * this.surfaces.pitch - w.pitch)
+      - STABILITY_PITCH * qbar * (this.pitchAngle - flightPath);
+    const momentRoll =
+      qbar * ROLL_DAMP * (ROLL_RATE * AILERON_AUTH * this.surfaces.roll - w.roll);
+    const momentYaw =
+      qbar * YAW_DAMP * (YAW_RATE * RUDDER_AUTH * this.surfaces.yaw - w.yaw)
+      + STABILITY_YAW * qbar * sideslip;
+
+    w.pitch += (momentPitch / INERTIA.pitch) * dt;
+    w.roll  += (momentRoll  / INERTIA.roll)  * dt;
+    w.yaw   += (momentYaw   / INERTIA.yaw)   * dt;
+
+    /* --- attitude integrated from body rates (X = pitch up, Z = roll right, Y = yaw right) --- */
     let q = this.orientation;
-    q = qmul(q, qaxis(1, 0, 0, this.rates.pitch * dt));
-    q = qmul(q, qaxis(0, 0, 1, -this.rates.roll * dt));
-    q = qmul(q, qaxis(0, 1, 0, -this.rates.yaw * dt));
+    q = qmul(q, qaxis(1, 0, 0, w.pitch * dt));
+    q = qmul(q, qaxis(0, 0, 1, -w.roll * dt));
+    q = qmul(q, qaxis(0, 1, 0, -w.yaw * dt));
     this.orientation = qnorm(q);
     this.#refreshBasis();
 
@@ -301,7 +331,7 @@ export class Aircraft {
     this.state = STATE.GROUND;
     this.landedAt = this.elapsed;
     this.steerAngle = 0;
-    this.rates = { pitch: 0, roll: 0, yaw: 0 };
+    this.omega = { pitch: 0, roll: 0, yaw: 0 };
 
     // Rolling speed only; the descent is absorbed by the undercarriage.
     const speed = Math.hypot(this.body.velocity.x, this.body.velocity.z);
@@ -332,7 +362,7 @@ export class Aircraft {
       this.forward.y * speed,
       this.forward.z * speed,
     );
-    this.rates = { pitch: 0, roll: 0, yaw: 0 };
+    this.omega = { pitch: 0, roll: 0, yaw: 0 };
   }
 
   #crash(reason) {

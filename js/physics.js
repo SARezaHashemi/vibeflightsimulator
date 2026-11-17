@@ -3,8 +3,9 @@
  *
  * A `Body` owns a mass, a position and a velocity. During a frame, force
  * generators push and pull on it; `step()` turns the accumulated force into an
- * acceleration and integrates with semi-implicit Euler. Angular state lives on
- * the aircraft itself, so this module only advances translation.
+ * acceleration and integrates with velocity Verlet, which conserves the
+ * mechanical energy of a constant-force (gravity) step exactly. Angular state
+ * lives on the aircraft itself, so this module only advances translation.
  *
  * Units are SI: metres, seconds, kilograms, newtons.
  */
@@ -55,8 +56,14 @@ export class Body {
   }
 
   /**
-   * Advance one frame. Updating velocity before position (semi-implicit Euler)
-   * keeps the integration stable at the frame rates we see in the browser.
+   * Advance one frame with velocity Verlet: move to the half-step using the
+   * current velocity plus half the acceleration, then finish the velocity.
+   *
+   * For a constant force this integrates the trajectory and the mechanical
+   * energy exactly — gravity neither gains nor loses energy from the scheme.
+   * The old semi-implicit update lost ½·g²·dt² of energy every step under
+   * gravity. Drag, thrust and the other real forces still do their physical
+   * work on top, so total energy only changes through those forces.
    */
   step(dt) {
     const invMass = 1 / this.mass;
@@ -65,16 +72,35 @@ export class Body {
     this.acceleration.y = this.force.y * invMass;
     this.acceleration.z = this.force.z * invMass;
 
+    this.position.x += this.velocity.x * dt + 0.5 * this.acceleration.x * dt * dt;
+    this.position.y += this.velocity.y * dt + 0.5 * this.acceleration.y * dt * dt;
+    this.position.z += this.velocity.z * dt + 0.5 * this.acceleration.z * dt * dt;
+
     this.velocity.x += this.acceleration.x * dt;
     this.velocity.y += this.acceleration.y * dt;
     this.velocity.z += this.acceleration.z * dt;
 
-    this.position.x += this.velocity.x * dt;
-    this.position.y += this.velocity.y * dt;
-    this.position.z += this.velocity.z * dt;
-
     this.clearForces();
   }
+}
+
+/** Translational mechanical energy: kinetic + gravitational potential. */
+export function mechanicalEnergy(body, gravity = 9.81) {
+  const v = body.velocity;
+  return 0.5 * body.mass * (v.x * v.x + v.y * v.y + v.z * v.z)
+    + body.mass * gravity * body.position.y;
+}
+
+/**
+ * Rotational kinetic energy, ½·L·ω. Both vectors must be expressed in the
+ * same frame; the dot product is not invariant under a rotation of only one.
+ */
+export function rotationalEnergy(angularMomentum, angularVelocity) {
+  return 0.5 * (
+    angularMomentum.x * angularVelocity.x +
+    angularMomentum.y * angularVelocity.y +
+    angularMomentum.z * angularVelocity.z
+  );
 }
 
 /** Uniform gravitational field. */

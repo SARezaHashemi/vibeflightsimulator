@@ -13,7 +13,7 @@ import {
   CHASE_BACK, CHASE_LIFT, CHASE_AIM,
 } from './config.js';
 import { cross, normalise } from './math.js';
-import { terrainHeight } from './world.js';
+import { surfaceHeight } from './world.js';
 
 const NEAR = 0.5;
 const WORLD_UP = Object.freeze({ x: 0, y: 1, z: 0 });
@@ -81,7 +81,7 @@ export class Camera {
       z: p.z - f.z * CHASE_BACK + upRef.z * CHASE_LIFT,
     };
 
-    const floor = terrainHeight(eye.x, eye.z) + GROUND_CLEARANCE;
+    const floor = surfaceHeight(eye.x, eye.z) + GROUND_CLEARANCE;
     if (eye.y < floor) eye.y = floor;
 
     const aim = {

@@ -52,8 +52,18 @@ export const ROLL_DAMP = 4000;    // N·m·s/rad per kPa
 export const YAW_DAMP = 7000;     // N·m·s/rad per kPa
 export const STABILITY_PITCH = 16000; // N·m/rad per kPa — holds the trim angle of attack
 export const STABILITY_YAW = 10000;   // N·m/rad per kPa — weathervane into the relative wind
-export const THROTTLE_RATE = 0.55; // per second
+export const THROTTLE_RATE = 0.55; // throttle lever travel per second
 export const CONTROL_SMOOTHING = 9; // input ramp, higher = snappier
+
+/* ---- engine ------------------------------------------------------ */
+// Throttle is a lever, not a thrust slider: the engine spools towards it and
+// thrust falls away with air density and at high forward speed.
+export const ENGINE_IDLE = 0.04;    // fraction of maximum thrust at idle
+export const ENGINE_SPOOL_UP = 1.3; // 1/s, lag when opening the throttle
+export const ENGINE_SPOOL_DOWN = 2.1; // 1/s, lag when closing it
+export const ENGINE_FADE_SPEED = 90;   // m/s where the propeller starts to unload
+export const ENGINE_FADE_SPAN = 140;   // m/s over which thrust falls to the floor
+export const ENGINE_FADE_FLOOR = 0.25; // minimum fraction of thrust left at speed
 export const EYE_HEIGHT = 1.15;  // cockpit eye, above the aircraft's origin
 export const EYE_FORWARD = 2.9;  // ... and this far ahead, inside the canopy
 
@@ -89,6 +99,7 @@ export const START_THROTTLE = 0.65;
 /* ---- palette ------------------------------------------------------- */
 export const HAZE = [198, 220, 236];
 export const WATER = [26, 78, 118];
+export const WATER_CREST = [74, 132, 158];
 export const SEA_LEVEL = 0;
 
 export const SKY_STOPS = [
@@ -112,3 +123,21 @@ export const CLOUD_BASE_MIN = 900;    // m above sea level, lowest cloud base
 export const CLOUD_BASE_MAX = 1800;   // m, highest cloud base
 export const CLOUD_MAX_DISTANCE = 9000; // m, beyond this clouds are not drawn
 export const CLOUD_OPACITY = 0.94;
+
+/* ---- trees --------------------------------------------------------- */
+export const TREE_RANGE = 24;          // terrain cells around the aircraft to consider
+export const TREE_MAX_DISTANCE = 2400; // m, beyond this trees are not drawn
+export const TREE_FADE = 300;          // m, distance over which trees fade out
+export const TREE_MIN_PIXELS = 3.0;    // cull trees shorter than this on screen
+export const TREE_DETAIL_DISTANCE = 320; // m, nearer trees are drawn as solid low-poly volumes
+export const TREE_NEAR = 10;           // m, don't draw trees right on the camera
+export const TREE_PATCH = 0.52;        // fraction of the map covered by woodland
+export const TREE_WOODS_DENSITY = 0.55; // fraction of wooded cells holding trees
+export const TREE_SCATTER_DENSITY = 0.08; // lone trees outside the woods
+export const TREE_MIN_GROUND = 5;      // m above sea level, no trees on the beach
+export const TREE_MAX_GROUND = 290;    // m, no trees on the high rock and snow
+export const TREE_MIN_HEIGHT = 7;      // m, before the species' own size scaling
+export const TREE_MAX_HEIGHT = 30;     // m
+export const TREE_RUNWAY_CLEARANCE = 80;  // m either side of the centreline
+export const TREE_APPROACH_CLEARANCE = 500; // m beyond each threshold
+export const TREE_COLLISION_MARGIN = 2.5; // m, airframe radius used for tree strikes

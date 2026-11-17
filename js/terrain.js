@@ -14,8 +14,9 @@
 import {
   GRID_RADIUS, CELL_MIN, CELL_MAX, CELL_PER_METRE, CELL_BIAS,
   FOG_START, FOG_CURVE, HAZE, SUN_DIR,
+  SEA_LEVEL, WATER, WATER_CREST,
 } from './config.js';
-import { terrainHeight, surfaceColor } from './world.js';
+import { terrainHeight, surfaceColor, waterHeight } from './world.js';
 import { clamp } from './math.js';
 
 const M = 2 * GRID_RADIUS + 1;      // grid points per axis
@@ -48,9 +49,79 @@ function expand(px, py, mx, my) {
   return [px + dx * k, py + dy * k];
 }
 
+/**
+ * Paint one water cell as a flat plane broken into wave facets.
+ *
+ * The sea has no terrain relief: every vertex sits on `SEA_LEVEL` plus a small
+ * wave offset. Near the camera the cell is split in two so the swell has some
+ * shape; far away one quad is enough because the waves are sub-pixel.
+ */
+function drawWaterCell(ctx, camera, x0, z0, size, time, fog, near) {
+  const segments = near ? 2 : 1;
+  const step = size / segments;
+
+  for (let si = 0; si < segments; si++) {
+    for (let sj = 0; sj < segments; sj++) {
+      const wx = x0 + si * step;
+      const wz = z0 + sj * step;
+      const wx1 = wx + step;
+      const wz1 = wz + step;
+
+      const ha = waterHeight(wx, wz, time);
+      const hb = waterHeight(wx1, wz, time);
+      const hc = waterHeight(wx1, wz1, time);
+      const hd = waterHeight(wx, wz1, time);
+
+      const poly = camera.projectPolygon([
+        { x: wx, y: ha, z: wz },
+        { x: wx1, y: hb, z: wz },
+        { x: wx1, y: hc, z: wz1 },
+        { x: wx, y: hd, z: wz1 },
+      ]);
+      if (!poly) continue;
+
+      // Facet normal from the same edge vectors the land uses.
+      const nx = -(hb - ha) * step;
+      const nz = -(hd - ha) * step;
+      const ny = step * step;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      const lambert = (nx * SUN_DIR.x + ny * SUN_DIR.y + nz * SUN_DIR.z) / nl;
+      const shade = clamp(0.55 + 0.90 * (lambert * 0.5 + 0.5), 0.52, 1.24);
+
+      // Crests catch a lighter blue; troughs stay deep.
+      const average = (ha + hb + hc + hd) * 0.25;
+      const crest = clamp((average - SEA_LEVEL) / 0.8 + 0.5, 0, 1);
+      const r = (WATER[0] + (WATER_CREST[0] - WATER[0]) * crest) * shade;
+      const g = (WATER[1] + (WATER_CREST[1] - WATER[1]) * crest) * shade;
+      const b = (WATER[2] + (WATER_CREST[2] - WATER[2]) * crest) * shade;
+
+      let mx = 0;
+      let my = 0;
+      for (const p of poly) { mx += p.x; my += p.y; }
+      mx /= poly.length;
+      my /= poly.length;
+
+      ctx.beginPath();
+      const first = expand(poly[0].x, poly[0].y, mx, my);
+      ctx.moveTo(first[0], first[1]);
+      for (let i = 1; i < poly.length; i++) {
+        const p = expand(poly[i].x, poly[i].y, mx, my);
+        ctx.lineTo(p[0], p[1]);
+      }
+      ctx.closePath();
+      ctx.fillStyle =
+        `rgb(${(r * (1 - fog) + HAZE[0] * fog) | 0},` +
+        `${(g * (1 - fog) + HAZE[1] * fog) | 0},` +
+        `${(b * (1 - fog) + HAZE[2] * fog) | 0})`;
+      ctx.fill();
+    }
+  }
+}
+
 export class TerrainRenderer {
   constructor() {
     this.height = new Float32Array(M * M);
+    this.ground = new Float32Array(M * M);
     this.screenX = new Float32Array(M * M);
     this.screenY = new Float32Array(M * M);
     this.depth = new Float32Array(M * M);
@@ -58,7 +129,7 @@ export class TerrainRenderer {
     this.colour = [0, 0, 0];
   }
 
-  draw(ctx, camera, layers = []) {
+  draw(ctx, camera, layers = [], time = 0) {
     const W = camera.width;
     const H = camera.height;
     const f = camera.focal;
@@ -74,7 +145,12 @@ export class TerrainRenderer {
       for (let j = 0; j < M; j++) {
         const wz = originZ + j * cell;
         const idx = i * M + j;
-        const h = terrainHeight(wx, wz);
+        const ground = terrainHeight(wx, wz);
+        this.ground[idx] = ground;
+        // Water cells render at the flat sea surface instead of following the
+        // seabed. The terrain height itself is left alone for physics, trees
+        // and the camera.
+        const h = ground < SEA_LEVEL ? waterHeight(wx, wz, time) : ground;
         this.height[idx] = h;
 
         const dx = wx - eye.x;
@@ -129,6 +205,28 @@ export class TerrainRenderer {
       const c = b + 1;
       const d = a + 1;
 
+      const distance = (this.depth[a] + this.depth[b] + this.depth[c] + this.depth[d]) * 0.25;
+      const fog = Math.pow(
+        clamp((distance - maxDistance * FOG_START) / (maxDistance * (1 - FOG_START)), 0, 1),
+        FOG_CURVE,
+      );
+
+      // A cell whose ground is entirely below sea level is water. Draw it as a
+      // flat, rippling plane rather than letting the seabed show through the
+      // surface. Mixed shore cells keep the land mesh and meet the water at
+      // sea level.
+      if (this.ground[a] <= SEA_LEVEL && this.ground[b] <= SEA_LEVEL &&
+          this.ground[c] <= SEA_LEVEL && this.ground[d] <= SEA_LEVEL) {
+        const gi = (a / M) | 0;
+        const gj = a - gi * M;
+        drawWaterCell(
+          ctx, camera,
+          originX + gi * cell, originZ + gj * cell,
+          cell, time, fog, distance < 1600,
+        );
+        continue;
+      }
+
       const ha = this.height[a];
       const hb = this.height[b];
       const hc = this.height[c];
@@ -149,12 +247,6 @@ export class TerrainRenderer {
       colour[0] *= noise * shade;
       colour[1] *= noise * shade;
       colour[2] *= noise * shade;
-
-      const distance = (this.depth[a] + this.depth[b] + this.depth[c] + this.depth[d]) * 0.25;
-      const fog = Math.pow(
-        clamp((distance - maxDistance * FOG_START) / (maxDistance * (1 - FOG_START)), 0, 1),
-        FOG_CURVE,
-      );
 
       const r = colour[0] * (1 - fog) + HAZE[0] * fog;
       const g = colour[1] * (1 - fog) + HAZE[1] * fog;

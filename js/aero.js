@@ -2,11 +2,12 @@
  * Aerodynamics: air density, the wing's lift curve, the drag polar and the
  * force generator that turns them into forces on a `Body`.
  *
- * The model is still point-mass — attitude is not driven by the aero moments —
- * but the forces are the real ones. Lift rises with the square of airspeed and
- * with angle of attack until the wing stalls; drag is parasitic plus induced
- * plus a large separated-flow term once the wing gives up. Side force from
- * sideslip weathervanes the velocity into line with the nose.
+ * Translation is still point-mass, but the forces are the real ones. Lift
+ * rises with the square of airspeed and with angle of attack until the wing
+ * stalls; drag is parasitic plus induced plus a large separated-flow term once
+ * the wing gives up. Side force from sideslip weathervanes the velocity into
+ * line with the nose; the flight model turns that sideslip into the yaw
+ * stability moment.
  *
  * Units are SI. Coefficients are dimensionless, forces newtons.
  */

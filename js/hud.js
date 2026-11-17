@@ -114,11 +114,15 @@ export function drawHUD(ctx, aircraft, width, height) {
   const barX = 22, barY = H - 30, barW = 120, barH = 8;
   ctx.fillStyle = tint(0.18);
   ctx.fillRect(barX, barY, barW, barH);
-  ctx.fillStyle = '#7fe0a8';
+  // The faint bar is the lever; the bright one is what the engine has actually
+  // spooled up to.
+  ctx.fillStyle = tint(0.30);
   ctx.fillRect(barX, barY, barW * aircraft.throttle, barH);
+  ctx.fillStyle = '#7fe0a8';
+  ctx.fillRect(barX, barY, barW * aircraft.engine, barH);
   ctx.font = LABEL;
   ctx.fillStyle = tint(0.75);
-  ctx.fillText(Math.round(aircraft.throttle * 100) + '%', barX + barW + 10, H - 46);
+  ctx.fillText(Math.round(aircraft.engine * 100) + '%', barX + barW + 10, H - 46);
 
   /* ---- gear, bottom centre ---- */
   drawGear(ctx, aircraft, W, H);

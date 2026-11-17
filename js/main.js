@@ -9,6 +9,7 @@ import { TerrainRenderer } from './terrain.js';
 import { drawSky, drawSun } from './sky.js';
 import { drawHUD } from './hud.js';
 import { runwayLayer } from './scenery.js';
+import { treeLayers } from './trees.js';
 import { cloudLayers } from './clouds.js';
 import { drawAircraft } from './model.js';
 import { COCKPIT_CULL } from './config.js';
@@ -42,14 +43,18 @@ const input = new Input(window, {
   onView: () => { cockpit = !cockpit; },
 });
 
-function render() {
+function render(now) {
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 
   camera.update(aircraft, view.width, view.height, cockpit ? 'cockpit' : 'chase');
 
   drawSky(ctx, camera);
   drawSun(ctx, camera);
-  terrain.draw(ctx, camera, [runwayLayer(camera), ...cloudLayers(camera)]);
+  terrain.draw(ctx, camera, [
+    runwayLayer(camera),
+    ...treeLayers(camera),
+    ...cloudLayers(camera),
+  ], now * 0.001);
   drawAircraft(ctx, camera, aircraft, cockpit ? COCKPIT_CULL : 0);
   drawHUD(ctx, aircraft, view.width, view.height);
 }
@@ -62,7 +67,7 @@ function frame(now) {
 
   aircraft.update(dt, input.axes);   // no-op once crashed
 
-  render();
+  render(now);
   requestAnimationFrame(frame);
 }
 

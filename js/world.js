@@ -78,6 +78,34 @@ export function isOnRunway(x, z, margin = 0) {
 /** True where the ground is under water. */
 export const isWater = (h) => h <= SEA_LEVEL;
 
+/**
+ * Height of the solid surface at a world position: the ground where it is dry,
+ * or the sea surface where the seabed lies below it.
+ *
+ * `terrainHeight` still describes the seabed, which is what the water mesh is
+ * cut from; anything that physically touches the world (collision, altitude,
+ * camera clearance) should use this instead so the flat sea is solid water
+ * rather than a hole down to the sea floor.
+ */
+export function surfaceHeight(x, z) {
+  return Math.max(terrainHeight(x, z), SEA_LEVEL);
+}
+
+/**
+ * Height of the sea surface at a world position, in metres.
+ *
+ * The sea is a flat plane at `SEA_LEVEL`; these three long, shallow sines only
+ * ripple it by a few tens of centimetres. They are anchored to world
+ * coordinates and advance with time, so the waves drift across the surface
+ * instead of sliding with the camera.
+ */
+export function waterHeight(x, z, time = 0) {
+  return SEA_LEVEL
+    + 0.24 * Math.sin(x * 0.028 + z * 0.010 + time * 1.10)
+    + 0.14 * Math.sin(z * 0.041 - x * 0.008 - time * 1.45)
+    + 0.08 * Math.sin((x + z) * 0.075 + time * 2.10);
+}
+
 /* ---------------------------------------------------------------- palette */
 
 /**

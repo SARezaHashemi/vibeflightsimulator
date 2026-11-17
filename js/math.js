@@ -27,6 +27,30 @@ export function qnorm(q) {
   return { x: q.x / len, y: q.y / len, z: q.z / len, w: q.w / len };
 }
 
+/** Conjugate; the inverse rotation for a unit quaternion. */
+export const qconj = (q) => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
+
+/**
+ * Advance an orientation by a body-frame angular velocity over `dt`.
+ *
+ * Treating the angular velocity as constant across the step and rotating
+ * about its axis is exact, unlike composing three small Euler rotations, and
+ * keeps the quaternion normalised without leaking rotational energy.
+ */
+export function qspin(q, w, dt) {
+  const speed = Math.hypot(w.x, w.y, w.z);
+  const angle = speed * dt;
+  if (angle < 1e-9) return q;
+
+  const s = Math.sin(angle * 0.5) / speed;
+  return qnorm(qmul(q, {
+    x: w.x * s,
+    y: w.y * s,
+    z: w.z * s,
+    w: Math.cos(angle * 0.5),
+  }));
+}
+
 /** Rotate vector `v` by quaternion `q`. */
 export function qrot(q, v) {
   const tx = 2 * (q.y * v.z - q.z * v.y);

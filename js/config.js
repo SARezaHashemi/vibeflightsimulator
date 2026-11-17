@@ -19,14 +19,8 @@ export const FOG_CURVE = 1.4;
 /* ---- flight model -------------------------------------------------- */
 export const MASS = 1100;        // kg — the physics body's mass
 export const MAX_THRUST = 26;    // m/s² at full throttle
-export const DRAG = 0.0030;      // quadratic drag coefficient
 export const GRAVITY = 9.8;
-export const CLIMB_PENALTY = 1.6; // extra speed loss while climbing
-export const STALL_SPEED = 62;   // below this the wing stops carrying the weight
-export const SAG_RATE = 0.55;
-export const LIFT_CAP = 2.5;     // max wing support, in g, in a steep bank
-export const PATH_ALIGN = 3.0;   // 1/s — how fast the flight path follows the nose
-export const MAX_PATH_ACCEL = 60; // m/s² cap on that aerodynamic alignment
+export const TRIM_ALPHA = 0.038; // rad (~2.2°) of angle of attack hands-off
 export const PITCH_RATE = 1.15;  // rad/s
 export const ROLL_RATE = 2.40;   // rad/s
 export const YAW_RATE = 0.70;    // rad/s
@@ -38,8 +32,12 @@ export const WING_AREA = 16.2;    // m², planform area
 export const WING_SPAN = 10.9;    // m
 export const CL_ALPHA = 5.2;      // 1/rad, lift slope before the stall
 export const CL_MAX = 1.35;       // peak lift coefficient
-export const ALPHA_STALL = 0.30;  // rad (~17°), angle of attack where lift peaks
-export const CD0 = 0.028;         // parasitic drag coefficient
+export const ALPHA_STALL = 0.30;  // rad (~17°), stall angle (lift caps at CL_MAX slightly earlier)
+// Parasitic drag. Inflated over a clean airframe's ~0.03 so the speed envelope
+// stays close to the old arcade model (full throttle tops out near 95 m/s).
+export const CD0 = 0.33;
+export const CD_STALL = 0.90;     // extra separated-flow drag past the stall
+export const CY_BETA = 0.40;      // side-force coefficient from sideslip
 export const OSWALD = 0.78;       // span efficiency for induced drag
 
 /* ---- rotational dynamics ------------------------------------------- */
@@ -49,11 +47,11 @@ export const INERTIA = { pitch: 9000, roll: 6000, yaw: 11000 }; // kg·m²
 export const ELEVATOR_AUTH = 1.0; // elevator effectiveness scale
 export const AILERON_AUTH = 1.0;  // aileron effectiveness scale
 export const RUDDER_AUTH = 1.0;   // rudder effectiveness scale
-export const PITCH_DAMP = 5000;   // N·m·s/rad per kPa — sets the pitch response time
+export const PITCH_DAMP = 6500;   // N·m·s/rad per kPa — sets the pitch response time
 export const ROLL_DAMP = 4000;    // N·m·s/rad per kPa
-export const YAW_DAMP = 6000;     // N·m·s/rad per kPa
-export const STABILITY_PITCH = 2000; // N·m/rad per kPa — nose returns to the flight path
-export const STABILITY_YAW = 1600;   // N·m/rad per kPa — weathervane into the relative wind
+export const YAW_DAMP = 7000;     // N·m·s/rad per kPa
+export const STABILITY_PITCH = 16000; // N·m/rad per kPa — holds the trim angle of attack
+export const STABILITY_YAW = 10000;   // N·m/rad per kPa — weathervane into the relative wind
 export const THROTTLE_RATE = 0.55; // per second
 export const CONTROL_SMOOTHING = 9; // input ramp, higher = snappier
 export const EYE_HEIGHT = 1.15;  // cockpit eye, above the aircraft's origin
@@ -67,7 +65,7 @@ export const COCKPIT_CULL = 1.6; // hide model faces closer than this to the eye
 
 /* ---- landing gear and ground handling ------------------------------ */
 export const GEAR_RATE = 2.2;         // extension travel per second
-export const GEAR_DRAG = 0.0006;      // extra drag while the gear is down
+export const GEAR_DRAG = 0.05;        // extra drag coefficient while the gear is down
 export const GEAR_HEIGHT = 1.6;       // contact point above the ground
 export const LANDING_MAX_DESCENT = 6; // m/s — harder than this and you break
 export const LANDING_MAX_SPEED = 100; // m/s
@@ -86,7 +84,7 @@ export const TAKEOFF_GRACE = 0.7;     // s of immunity from ground contact
 /* ---- start state --------------------------------------------------- */
 export const START = { x: 0, y: 400, z: -300 };
 export const START_SPEED = 85;
-export const START_THROTTLE = 0.55;
+export const START_THROTTLE = 0.65;
 
 /* ---- palette ------------------------------------------------------- */
 export const HAZE = [198, 220, 236];

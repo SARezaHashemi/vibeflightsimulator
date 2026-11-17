@@ -1,33 +1,40 @@
 /**
  * Flight model.
  *
- * The aircraft is a point mass driven by forces: thrust along the nose, drag
- * against the airflow, wing lift, gravity, and an aerodynamic term that swings
- * the flight path towards the nose. Attitude is still flown directly with the
- * control rates, and ground handling is still kinematic, so physics is taking
- * over the simulation one part at a time.
+ * The aircraft is a point mass driven by forces: thrust along the nose,
+ * gravity, and the aerodynamic lift, drag and side force from `aero.js`.
+ * Attitude is still flown directly with the control rates, with a pitch
+ * stability moment that holds a trim angle of attack and a yaw stability
+ * moment that weathervanes into the relative wind. Ground handling is still
+ * kinematic, so physics is taking over the simulation one part at a time.
  *
  * The aircraft is a small state machine: AIR → GROUND on a good touchdown,
  * AIR → CRASHED on a bad one, GROUND → AIR when you rotate again.
  */
 
 import {
-  MASS, MAX_THRUST, DRAG, GRAVITY, CLIMB_PENALTY, STALL_SPEED, SAG_RATE,
-  LIFT_CAP, PATH_ALIGN, MAX_PATH_ACCEL,
+  MASS, MAX_THRUST, GRAVITY, TRIM_ALPHA,
   PITCH_RATE, ROLL_RATE, YAW_RATE, THROTTLE_RATE,
-  RHO_SEA, SCALE_HEIGHT, INERTIA, ELEVATOR_AUTH, AILERON_AUTH, RUDDER_AUTH,
+  INERTIA, ELEVATOR_AUTH, AILERON_AUTH, RUDDER_AUTH,
   PITCH_DAMP, ROLL_DAMP, YAW_DAMP, STABILITY_PITCH, STABILITY_YAW,
   CONTROL_SMOOTHING, START, START_SPEED, START_THROTTLE,
-  GEAR_RATE, GEAR_DRAG, GEAR_HEIGHT,
+  GEAR_RATE, GEAR_HEIGHT,
   LANDING_MAX_DESCENT, LANDING_MAX_SPEED, LANDING_MAX_BANK, LANDING_MAX_ALIGN,
   ROTATE_SPEED, WHEELBASE, MAX_STEER, STEER_RATE, TIRE_GRIP, TIRE_SLIP,
   ROLL_RESISTANCE, BRAKE_FORCE, TAKEOFF_GRACE,
 } from './config.js';
-import { clamp, qaxis, qmul, qnorm, qrot, scale, sub } from './math.js';
-import { Body, applyDrag, applyGravity } from './physics.js';
+import { clamp, qaxis, qmul, qnorm, qrot, scale } from './math.js';
+import { Body, applyGravity } from './physics.js';
+import { applyAerodynamics, applyGroundDrag, flowAngles } from './aero.js';
 import { AIRPORT, terrainHeight, isOnRunway } from './world.js';
 
 export const STATE = Object.freeze({ AIR: 'air', GROUND: 'ground', CRASHED: 'crashed' });
+
+/** Telemetry used when the wing is not doing anything (parked, crashed). */
+const AERO_IDLE = Object.freeze({
+  alpha: 0, beta: 0, speed: 0, qbar: 0,
+  cl: 0, cd: 0, lift: 0, drag: 0, gLoad: 1, stalled: false,
+});
 
 /** Shortest signed angle between two headings. */
 const angleDelta = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
@@ -45,7 +52,7 @@ export class Aircraft {
     });
     this.position = this.body.position;
 
-    this.orientation = { x: 0, y: 0, z: 0, w: 1 };
+    this.orientation = qaxis(1, 0, 0, TRIM_ALPHA);
     this.throttle = START_THROTTLE;
     this.omega = { pitch: 0, roll: 0, yaw: 0 };       // body rates, rad/s
     this.surfaces = { pitch: 0, roll: 0, yaw: 0 };    // smoothed control deflections
@@ -60,9 +67,8 @@ export class Aircraft {
     this.groundIgnoreUntil = 0;
     this.landedAt = -1;
 
-    this.forward = { x: 0, y: 0, z: -1 };
-    this.up = { x: 0, y: 1, z: 0 };
-    this.right = { x: 1, y: 0, z: 0 };
+    this.aero = AERO_IDLE;
+    this.#refreshBasis();
   }
 
   /* ------------------------------------------------------------ readings */
@@ -79,6 +85,20 @@ export class Aircraft {
   /** Positive when climbing, m/s. */
   get verticalSpeed() {
     return this.state === STATE.AIR ? this.body.velocity.y : 0;
+  }
+
+  /** Angle of attack in radians; positive means nose above the flight path. */
+  get angleOfAttack() {
+    return this.aero.alpha;
+  }
+
+  /** Wing lift in g. One g means the wing is carrying the aircraft's weight. */
+  get gLoad() {
+    return this.aero.gLoad;
+  }
+
+  get isStalled() {
+    return this.state === STATE.AIR && this.aero.stalled;
   }
 
   get altitudeAgl() {
@@ -143,26 +163,18 @@ export class Aircraft {
 
     /* --- rotational dynamics: moments → angular acceleration → body rates --- */
     const altitude = Math.max(0, this.position.y);
-    const rho = RHO_SEA * Math.exp(-altitude / SCALE_HEIGHT);
-    const qbar = clamp((0.5 * rho * this.body.speed ** 2) / 1000, 0.2, 15); // kPa
-
-    const v = this.body.velocity;
-    const vSpeed = Math.max(this.body.speed, 1e-3);
-    const flightPath = Math.asin(clamp(v.y / vSpeed, -1, 1));
-    const sideslip = Math.atan2(
-      v.x * this.right.x + v.y * this.right.y + v.z * this.right.z,
-      v.x * this.forward.x + v.y * this.forward.y + v.z * this.forward.z,
-    );
+    const flow = flowAngles(this.body, this, altitude);
+    const qbar = clamp(flow.qbar / 1000, 0.2, 15); // kPa
 
     const w = this.omega;
     const momentPitch =
       qbar * PITCH_DAMP * (PITCH_RATE * ELEVATOR_AUTH * this.surfaces.pitch - w.pitch)
-      - STABILITY_PITCH * qbar * (this.pitchAngle - flightPath);
+      - STABILITY_PITCH * qbar * (flow.alpha - TRIM_ALPHA);
     const momentRoll =
       qbar * ROLL_DAMP * (ROLL_RATE * AILERON_AUTH * this.surfaces.roll - w.roll);
     const momentYaw =
       qbar * YAW_DAMP * (YAW_RATE * RUDDER_AUTH * this.surfaces.yaw - w.yaw)
-      + STABILITY_YAW * qbar * sideslip;
+      + STABILITY_YAW * qbar * flow.beta;
 
     w.pitch += (momentPitch / INERTIA.pitch) * dt;
     w.roll  += (momentRoll  / INERTIA.roll)  * dt;
@@ -185,41 +197,15 @@ export class Aircraft {
     const body = this.body;
     body.clearForces();
 
-    const speed = body.speed;
-
     applyGravity(body, GRAVITY);
 
     // Engine thrust acts along the nose.
     body.applyForce(scale(this.forward, MAX_THRUST * this.throttle * MASS));
 
-    // Airframe and gear drag.
-    applyDrag(body, DRAG + GEAR_DRAG * this.gearPosition);
-
-    // Wings: hold the aircraft's weight up while they are the right way up,
-    // and give up below flying speed. Lifting along `up` (rather than straight
-    // up) tilts the support vector in a bank and reproduces the climb/descent
-    // exchange of energy with gravity.
-    const upright = this.up.y > 0.15;
-    const support = upright ? Math.min(1 / this.up.y, LIFT_CAP) : 0;
-    const wing = clamp((speed / STALL_SPEED) ** 2, 0, 1);
-    body.applyForce(scale(this.up, GRAVITY * support * wing * MASS));
-
-    // Below flying speed the wing cannot carry the aircraft any more.
-    const sag = Math.max(0, STALL_SPEED - speed) * SAG_RATE;
-    body.applyForce({ x: 0, y: -sag * MASS, z: 0 });
-
-    // Climbing costs extra energy (induced drag) on top of the gravity term.
-    const climbDrag = -GRAVITY * this.forward.y * (CLIMB_PENALTY - 1) * MASS;
-    body.applyForce(scale(this.forward, climbDrag));
-
-    // Aerodynamic stability: swing the flight path towards the nose instead
-    // of welding velocity to it. This is what gives the flight path inertia.
-    let align = scale(sub(scale(this.forward, speed), body.velocity), PATH_ALIGN);
-    const alignLength = Math.hypot(align.x, align.y, align.z);
-    if (alignLength > MAX_PATH_ACCEL) {
-      align = scale(align, MAX_PATH_ACCEL / alignLength);
-    }
-    body.applyForce(scale(align, MASS));
+    // Wings and airframe: a real lift curve and drag polar. Lift banks with the
+    // wings, drag rises with the square of speed and of lift, and the wing
+    // stalls when the angle of attack gets too high.
+    this.aero = applyAerodynamics(body, this, altitude, this.gearPosition);
 
     body.step(dt);
 
@@ -232,6 +218,8 @@ export class Aircraft {
 
   #updateGround(dt, axes) {
     const body = this.body;
+
+    this.aero = AERO_IDLE;
 
     /* --- nosewheel steering: a simple bicycle model --- */
     const steerInput = clamp(axes.yaw + axes.roll * 0.6, -1, 1);
@@ -265,8 +253,9 @@ export class Aircraft {
     // Engine thrust acts along the nose.
     body.applyForce(scale(this.forward, MAX_THRUST * this.throttle * MASS));
 
-    // Aerodynamic drag.
-    applyDrag(body, DRAG);
+    // Aerodynamic drag. The wheels carry the weight, so only parasite and gear
+    // drag act while the aircraft is rolling.
+    applyGroundDrag(body, this.position.y, this.gearPosition);
 
     const horizontal = Math.hypot(body.velocity.x, body.velocity.z);
     if (horizontal > 0.02) {
@@ -351,16 +340,17 @@ export class Aircraft {
 
     // Rotate to a shallow climb, then hand control back to the flyer.
     const yaw = qaxis(0, 1, 0, -this.groundHeading);
-    this.orientation = qnorm(qmul(yaw, qaxis(1, 0, 0, 0.12)));
+    this.orientation = qnorm(qmul(yaw, qaxis(1, 0, 0, 0.10)));
     this.#refreshBasis();
     this.position.y += 1.2;
 
-    // Hand the rolling speed to the physics body, pointed up the new nose.
+    // Keep the rolling velocity level. Rotating the nose away from it gives
+    // the wing the angle of attack that starts the climb.
     const speed = this.body.speed;
     this.body.setVelocity(
-      this.forward.x * speed,
-      this.forward.y * speed,
-      this.forward.z * speed,
+      Math.sin(this.groundHeading) * speed,
+      0,
+      -Math.cos(this.groundHeading) * speed,
     );
     this.omega = { pitch: 0, roll: 0, yaw: 0 };
   }
@@ -368,6 +358,7 @@ export class Aircraft {
   #crash(reason) {
     this.state = STATE.CRASHED;
     this.crashReason = reason;
+    this.aero = AERO_IDLE;
     this.position.y = terrainHeight(this.position.x, this.position.z) + GEAR_HEIGHT;
   }
 

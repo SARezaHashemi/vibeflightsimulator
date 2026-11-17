@@ -2,7 +2,7 @@
  * Head-up display, painted straight onto the canvas in CSS pixels.
  */
 
-import { FONT, HUD_TINT } from './config.js';
+import { FONT, HUD_TINT, ROTATE_SPEED } from './config.js';
 import { AIRPORT } from './world.js';
 
 const LABEL = '600 10px ' + FONT;
@@ -83,6 +83,11 @@ export function drawHUD(ctx, aircraft, width, height) {
   ctx.fillText('KM/H', 20 + kmhWidth + 7, 50);
   ctx.fillText(Math.round(aircraft.speed) + ' M/S', 20, 72);
 
+  /* ---- aerodynamics: angle of attack and wing loading ---- */
+  const aoa = aircraft.angleOfAttack * 180 / Math.PI;
+  ctx.fillStyle = aircraft.isStalled ? '#ff8a7f' : tint(0.6);
+  ctx.fillText(`AOA ${aoa.toFixed(1)}\u00b0   ${aircraft.gLoad.toFixed(1)} G`, 20, 88);
+
   /* ---- altitude, top right ---- */
   ctx.textAlign = 'right';
   label(ctx, 'ALTITUDE', W - 22, 20);
@@ -133,7 +138,7 @@ export function drawHUD(ctx, aircraft, width, height) {
   ctx.stroke();
 
   /* ---- stall warning ---- */
-  if (aircraft.isAirborne && aircraft.speed < 52) {
+  if (aircraft.isStalled) {
     const blink = 0.45 + 0.55 * Math.abs(Math.sin(aircraft.elapsed * 7));
     ctx.textAlign = 'center';
     ctx.font = BOLD;
@@ -154,7 +159,7 @@ export function drawHUD(ctx, aircraft, width, height) {
     ctx.textAlign = 'center';
     ctx.font = SMALL;
     ctx.fillStyle = tint(0.5);
-    ctx.fillText('X to brake      S to rotate above ' + Math.round(55 * 3.6) + ' km/h', cx, cy + 68);
+    ctx.fillText('X to brake      S to rotate above ' + Math.round(ROTATE_SPEED * 3.6) + ' km/h', cx, cy + 68);
   }
 
   /* ---- controls hint, fades out after a few seconds ---- */

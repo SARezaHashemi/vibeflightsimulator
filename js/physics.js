@@ -1,11 +1,10 @@
 /**
- * A very small point-mass physics engine.
+ * A small point-mass physics engine.
  *
  * A `Body` owns a mass, a position and a velocity. During a frame, force
  * generators push and pull on it; `step()` turns the accumulated force into an
- * acceleration and integrates with semi-implicit Euler. Rotational dynamics
- * are deliberately out of scope for now — the aircraft's attitude is still
- * driven straight from the controls.
+ * acceleration and integrates with semi-implicit Euler. Angular state lives on
+ * the aircraft itself, so this module only advances translation.
  *
  * Units are SI: metres, seconds, kilograms, newtons.
  */
@@ -81,23 +80,4 @@ export class Body {
 /** Uniform gravitational field. */
 export function applyGravity(body, g = 9.81) {
   body.applyForce({ x: 0, y: -g * body.mass, z: 0 });
-}
-
-/**
- * Quadratic drag, opposing the direction of travel.
- * `coefficient` is the same value the old arcade model used for its
- * acceleration term, so force = mass * coefficient * speed².
- */
-export function applyDrag(body, coefficient) {
-  const speed = body.speed;
-  if (speed < 1e-6) return;
-
-  const deceleration = coefficient * speed * speed;
-  const scale = (deceleration * body.mass) / speed;
-
-  body.applyForce({
-    x: -body.velocity.x * scale,
-    y: -body.velocity.y * scale,
-    z: -body.velocity.z * scale,
-  });
 }

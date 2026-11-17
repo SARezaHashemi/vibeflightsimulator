@@ -32,8 +32,11 @@ Then open <http://localhost:8123>.
 
 ## Flying and landing
 
-Climbing costs airspeed, diving builds it. Below ~62 m/s the aircraft starts
-to sag, so keep the nose down when the stall warning blinks.
+Climbing costs airspeed, diving builds it. The wing stalls when its angle of
+attack gets too high — the HUD shows AoA and wing loading, and the wing starts
+to give up around 15° — so unload the stick and let the nose drop when the
+stall warning blinks. Air density falls with altitude, so the wing needs a
+little more speed up high.
 
 The runway marker at the top of the HUD gives distance and a turn arrow. Line
 up with the centreline, gear **down** (three green lamps), and touch down at
@@ -66,6 +69,7 @@ flight/
     ├── config.js       every tunable constant in one place
     ├── math.js         vector / quaternion helpers
     ├── physics.js      point-mass bodies: forces → acceleration → velocity
+    ├── aero.js         air density, lift curve, drag polar, aerodynamic forces
     ├── input.js        keyboard → normalised control axes
     ├── world.js        heightfield, airfield plateau, surface colours
     ├── aircraft.js     flight model, gear, landing, crash reasons
@@ -87,20 +91,31 @@ simulation), points `Camera` at the aircraft, and then draws: sky → terrain
 ### Physics
 
 In the air the aircraft is a point mass. Each frame `Aircraft` clears its
-body's forces, adds gravity, thrust, quadratic drag, wing lift, the stall sink
-and an aerodynamic path-alignment force, then lets `Body.step()` integrate
-velocity and position. The alignment term is what makes the flight path swing
-towards the nose with a little inertia instead of being welded to it.
+body's forces, adds gravity and thrust, then lets `aero.js` add the wing's
+lift, the drag polar and the side force from sideslip, before `Body.step()`
+integrates velocity and position.
+
+Lift follows a real curve: the coefficient rises linearly with angle of attack
+until `CL_MAX`, then the flow separates and lift drops away while separated-flow
+drag climbs. Lift is perpendicular to the relative wind and lies in the
+aircraft's plane of symmetry, so it banks with the wings and disappears in a
+vertical climb. Drag is parasite drag plus induced drag (which grows with the
+square of lift, so pulling g costs speed) plus the post-stall term. Air density
+falls exponentially with altitude. There is no artificial "wing holds the
+weight up" force any more; the aircraft stays up because the wing is producing
+enough lift, and it sinks when it is not.
 
 Attitude is still kinematic: the control axes rotate the orientation
-quaternion directly, with no torques or moments yet. On the ground the same
-body is used again: thrust, drag, rolling resistance, brakes and lateral tyre
-grip act as forces, while a bicycle model steers the nosewheel. Yaw rate comes
-from forward speed and wheel angle, capped by available grip, so taxi turns are
-tight, high-speed turns are gentle, and the aircraft keeps its momentum through
-a turn instead of snapping onto a new heading. Rotational dynamics, a real lift
-curve based on angle of attack, and spring/damper landing gear are the natural
-next steps.
+quaternion directly, with no torques or moments from the aero forces. The
+pitch stability moment holds a trim angle of attack, and the yaw stability
+moment weathervanes the nose into the relative wind. On the ground the same
+body is used again: thrust, parasite drag, rolling resistance, brakes and
+lateral tyre grip act as forces, while a bicycle model steers the nosewheel.
+Yaw rate comes from forward speed and wheel angle, capped by available grip, so
+taxi turns are tight, high-speed turns are gentle, and the aircraft keeps its
+momentum through a turn instead of snapping onto a new heading. Rotational
+dynamics driven by the aero moments, and spring/damper landing gear, are the
+natural next steps.
 
 The runway is flat geometry sitting on the terrain, so it is projected through
 the camera as world-space quads (clipped against the near plane, which matters

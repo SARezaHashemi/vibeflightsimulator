@@ -18,7 +18,6 @@ export const FOG_CURVE = 1.4;
 
 /* ---- flight model -------------------------------------------------- */
 export const MASS = 1100;        // kg — the physics body's mass
-export const MAX_THRUST = 26;    // m/s² at full throttle
 export const GRAVITY = 9.8;
 export const TRIM_ALPHA = 0.038; // rad (~2.2°) of angle of attack hands-off
 export const PITCH_RATE = 1.15;  // rad/s
@@ -33,9 +32,10 @@ export const WING_SPAN = 10.9;    // m
 export const CL_ALPHA = 5.2;      // 1/rad, lift slope before the stall
 export const CL_MAX = 1.35;       // peak lift coefficient
 export const ALPHA_STALL = 0.30;  // rad (~17°), stall angle (lift caps at CL_MAX slightly earlier)
-// Parasitic drag. Inflated over a clean airframe's ~0.03 so the speed envelope
-// stays close to the old arcade model (full throttle tops out near 95 m/s).
-export const CD0 = 0.33;
+// Parasitic drag of the clean airframe. Realistic for a light aircraft; with
+// a real propeller thrust curve this gives a cruise near 70 m/s and a top
+// speed near 80 m/s instead of the old arcade envelope.
+export const CD0 = 0.030;
 export const CD_STALL = 0.90;     // extra separated-flow drag past the stall
 export const CY_BETA = 0.40;      // side-force coefficient from sideslip
 export const OSWALD = 0.78;       // span efficiency for induced drag
@@ -55,15 +55,18 @@ export const STABILITY_YAW = 10000;   // N·m/rad per kPa — weathervane into t
 export const THROTTLE_RATE = 0.55; // throttle lever travel per second
 export const CONTROL_SMOOTHING = 9; // input ramp, higher = snappier
 
-/* ---- engine ------------------------------------------------------ */
-// Throttle is a lever, not a thrust slider: the engine spools towards it and
-// thrust falls away with air density and at high forward speed.
-export const ENGINE_IDLE = 0.04;    // fraction of maximum thrust at idle
-export const ENGINE_SPOOL_UP = 1.3; // 1/s, lag when opening the throttle
+/* ---- engine and propeller ------------------------------------------ */
+// The throttle commands shaft power, not thrust. A 180 kW engine turns a
+// 1.9 m propeller; momentum theory sets the static thrust limit, and once the
+// aircraft is moving the same power can only do η·P/V work on it. That gives
+// realistic acceleration at low speed and a 1/V thrust lapse in the cruise.
+export const ENGINE_POWER = 180000;   // W, sea-level shaft power at full throttle
+export const ENGINE_IDLE = 0.04;      // fraction of maximum power at idle
+export const ENGINE_SPOOL_UP = 1.3;   // 1/s, lag when opening the throttle
 export const ENGINE_SPOOL_DOWN = 2.1; // 1/s, lag when closing it
-export const ENGINE_FADE_SPEED = 90;   // m/s where the propeller starts to unload
-export const ENGINE_FADE_SPAN = 140;   // m/s over which thrust falls to the floor
-export const ENGINE_FADE_FLOOR = 0.25; // minimum fraction of thrust left at speed
+export const PROP_DIAMETER = 1.9;     // m
+export const PROP_EFFICIENCY = 0.82;  // propulsive efficiency in the cruise
+export const PROP_STATIC_EFFICIENCY = 0.80; // losses at zero forward speed
 export const EYE_HEIGHT = 1.15;  // cockpit eye, above the aircraft's origin
 export const EYE_FORWARD = 2.9;  // ... and this far ahead, inside the canopy
 
@@ -75,21 +78,48 @@ export const COCKPIT_CULL = 1.6; // hide model faces closer than this to the eye
 
 /* ---- landing gear and ground handling ------------------------------ */
 export const GEAR_RATE = 2.2;         // extension travel per second
-export const GEAR_DRAG = 0.05;        // extra drag coefficient while the gear is down
+export const GEAR_DRAG = 0.012;       // extra drag coefficient while the gear is down
 export const GEAR_HEIGHT = 1.6;       // contact point above the ground
-export const LANDING_MAX_DESCENT = 6; // m/s — harder than this and you break
-export const LANDING_MAX_SPEED = 100; // m/s
-export const LANDING_MAX_BANK = 0.20; // rad (~11°)
-export const LANDING_MAX_ALIGN = 0.35;// rad (~20°) of runway alignment
-export const ROTATE_SPEED = 55;       // m/s needed to lift off again
+export const ROTATE_SPEED = 42;       // m/s needed to lift off again (~151 km/h)
 export const WHEELBASE = 7;           // m — nosewheel to main gear
 export const MAX_STEER = 0.50;        // rad (~29°) of nosewheel deflection
 export const STEER_RATE = 2.2;        // rad/s — how fast the nosewheel turns
-export const TIRE_GRIP = 8.0;         // m/s² — lateral grip before the tyres slide
-export const TIRE_SLIP = 6.0;         // 1/s — how firmly the tyres pull velocity into line
-export const ROLL_RESISTANCE = 0.9;   // m/s² while rolling
-export const BRAKE_FORCE = 5.5;       // m/s² with the brake held
 export const TAKEOFF_GRACE = 0.7;     // s of immunity from ground contact
+export const MAX_GROUND_SLOPE = 0.55; // steepest grade the ground pose follows
+export const MAX_TAXI_SLOPE = 0.28;   // steeper than this and taxiing digs in
+export const TAXI_SLOPE_SPEED = 2.0;  // m/s; below this a slope cannot hurt you
+
+/**
+ * Per-surface handling and landing limits.
+ *
+ * `maxDescent` is the closing speed along the surface normal, not just the
+ * vertical speed, so flying level into a hillside still counts as a hard
+ * arrival. `taxiLimit` is how fast the aircraft may enter that surface from a
+ * smoother one. A runway excursion at taxi pace is harmless; the same
+ * excursion at take-off speed is not.
+ */
+export const SURFACE_HANDLING = {
+  runway: {
+    rolling: 0.30, brake: 4.8, grip: 8.0, slip: 6.0, steer: 1.0,
+    maxDescent: 4.5, maxSpeed: 90, maxBank: 0.20, maxAlign: 0.35,
+    maxSlope: 0.05, taxiLimit: Infinity,
+  },
+  grass: {
+    rolling: 1.20, brake: 3.8, grip: 5.5, slip: 4.0, steer: 0.82,
+    maxDescent: 3.0, maxSpeed: 70, maxBank: 0.17, maxAlign: 0.35,
+    maxSlope: 0.12, taxiLimit: 30,
+  },
+  rough: {
+    rolling: 3.20, brake: 3.0, grip: 4.0, slip: 3.0, steer: 0.55,
+    maxDescent: 1.8, maxSpeed: 45, maxBank: 0.12, maxAlign: 0.30,
+    maxSlope: 0.20, taxiLimit: 12,
+  },
+  water: {
+    rolling: 20, brake: 20, grip: 0, slip: 0, steer: 0,
+    maxDescent: 0, maxSpeed: 0, maxBank: 0, maxAlign: 0,
+    maxSlope: 0, taxiLimit: 0,
+  },
+};
 
 /* ---- start state --------------------------------------------------- */
 export const START = { x: 0, y: 400, z: -300 };

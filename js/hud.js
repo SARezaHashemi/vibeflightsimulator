@@ -81,12 +81,24 @@ export function drawHUD(ctx, aircraft, width, height) {
   ctx.font = LABEL;
   ctx.fillStyle = tint(0.6);
   ctx.fillText('KM/H', 20 + kmhWidth + 7, 50);
-  ctx.fillText(Math.round(aircraft.speed) + ' M/S', 20, 72);
+  const acc = aircraft.longitudinalAcceleration;
+  ctx.fillText(
+    `${Math.round(aircraft.speed)} M/S   ${acc >= 0 ? '+' : ''}${acc.toFixed(1)} M/S\u00b2`,
+    20,
+    72,
+  );
 
   /* ---- aerodynamics: angle of attack and wing loading ---- */
   const aoa = aircraft.angleOfAttack * 180 / Math.PI;
   ctx.fillStyle = aircraft.isStalled ? '#ff8a7f' : tint(0.6);
   ctx.fillText(`AOA ${aoa.toFixed(1)}\u00b0   ${aircraft.gLoad.toFixed(1)} G`, 20, 88);
+
+  /* ---- surface under the wheels ---- */
+  if (aircraft.surface && (aircraft.isGrounded || aircraft.isCrashed)) {
+    const kind = aircraft.surface.kind.toUpperCase();
+    ctx.fillStyle = aircraft.surface.kind === 'rough' ? '#ffb26b' : tint(0.6);
+    ctx.fillText(`SURFACE ${kind}`, 20, 104);
+  }
 
   /* ---- altitude, top right ---- */
   ctx.textAlign = 'right';
@@ -155,10 +167,22 @@ export function drawHUD(ctx, aircraft, width, height) {
     const since = aircraft.elapsed - aircraft.landedAt;
     if (since < 4) {
       const alpha = since < 2.5 ? 1 : 1 - (since - 2.5) / 1.5;
+      const landing = aircraft.lastLanding;
+      const surface = landing ? landing.surface.toUpperCase() : 'RUNWAY';
+      const firm = landing && landing.quality === 'firm';
+
+      const title = firm
+        ? 'FIRM LANDING'
+        : surface === 'RUNWAY'
+          ? 'LANDED'
+          : `LANDED ON ${surface}`;
+
       ctx.textAlign = 'center';
       ctx.font = BOLD;
-      ctx.fillStyle = `rgba(94,240,138,${alpha.toFixed(2)})`;
-      ctx.fillText('LANDED', cx, cy - 64);
+      ctx.fillStyle = firm
+        ? `rgba(240,200,96,${alpha.toFixed(2)})`
+        : `rgba(94,240,138,${alpha.toFixed(2)})`;
+      ctx.fillText(title, cx, cy - 64);
     }
     ctx.textAlign = 'center';
     ctx.font = SMALL;
@@ -194,9 +218,20 @@ export function drawHUD(ctx, aircraft, width, height) {
     ctx.fillStyle = 'rgba(220,240,255,0.75)';
     ctx.fillText('press  R  to fly again', W / 2, H / 2 + 26);
 
-    ctx.font = SMALL;
-    ctx.fillStyle = 'rgba(220,240,255,0.45)';
-    ctx.fillText('impact ' + Math.round(aircraft.speed * 3.6) + ' km/h', W / 2, H / 2 + 50);
+    const impact = aircraft.crashImpact;
+    if (impact) {
+      ctx.font = SMALL;
+      ctx.fillStyle = 'rgba(220,240,255,0.45)';
+      const sink = impact.sink > 0.05 ? `  \u00b7  ${impact.sink.toFixed(1)} m/s` : '';
+      ctx.fillText(
+        `impact ${Math.round(impact.speed * 3.6)} km/h${sink}`,
+        W / 2,
+        H / 2 + 50,
+      );
+      if (impact.surface && impact.surface !== 'runway') {
+        ctx.fillText('on ' + impact.surface.toUpperCase(), W / 2, H / 2 + 66);
+      }
+    }
   }
 
   ctx.shadowBlur = 0;

@@ -22,6 +22,49 @@ export function qaxis(x, y, z, angle) {
   return { x: x * s, y: y * s, z: z * s, w: Math.cos(angle * 0.5) };
 }
 
+/**
+ * Orientation from an orthonormal aircraft basis.
+ *
+ * Body +x is right, +y is up and +z points backwards, so the nose (-z) maps to
+ * `forward`. The columns of the rotation matrix are therefore
+ * [right, up, -forward].
+ */
+export function qfromBasis(right, up, forward) {
+  const m00 = right.x, m01 = up.x, m02 = -forward.x;
+  const m10 = right.y, m11 = up.y, m12 = -forward.y;
+  const m20 = right.z, m21 = up.z, m22 = -forward.z;
+  const trace = m00 + m11 + m22;
+
+  let x, y, z, w;
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2;
+    w = 0.25 * s;
+    x = (m21 - m12) / s;
+    y = (m02 - m20) / s;
+    z = (m10 - m01) / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    w = (m21 - m12) / s;
+    x = 0.25 * s;
+    y = (m01 + m10) / s;
+    z = (m02 + m20) / s;
+  } else if (m11 > m22) {
+    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    w = (m02 - m20) / s;
+    x = (m01 + m10) / s;
+    y = 0.25 * s;
+    z = (m12 + m21) / s;
+  } else {
+    const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
+    w = (m10 - m01) / s;
+    x = (m02 + m20) / s;
+    y = (m12 + m21) / s;
+    z = 0.25 * s;
+  }
+
+  return qnorm({ x, y, z, w });
+}
+
 export function qnorm(q) {
   const len = Math.hypot(q.x, q.y, q.z, q.w) || 1;
   return { x: q.x / len, y: q.y / len, z: q.z / len, w: q.w / len };

@@ -33,35 +33,49 @@ Then open <http://localhost:8123>.
 ## Flying and landing
 
 Climbing costs airspeed, diving builds it. The wing stalls when its angle of
-attack gets too high — the HUD shows AoA and wing loading, and the wing starts
-to give up around 15° — so unload the stick and let the nose drop when the
-stall warning blinks. Air density falls with altitude, so the wing needs a
-little more speed up high.
+attack gets too high — the HUD shows AoA, wing loading, and acceleration along
+the nose, and the wing starts to give up around 15° — so unload the stick and
+let the nose drop when the stall warning blinks. Air density falls with
+altitude, so the wing needs a little more speed up high.
 
 The runway marker at the top of the HUD gives distance and a turn arrow. Line
-up with the centreline, gear **down** (three green lamps), and touch down at
-a shallow angle. A touchdown is a landing only if all of these hold:
+up with the centreline, gear **down** (three green lamps), and touch down at a
+shallow angle. The surface decides how much the airframe will forgive:
 
-| Condition | Fail message |
-| --- | --- |
-| On the paved surface | `TERRAIN` |
-| Gear locked down | `GEAR UP` |
-| Under 360 km/h | `TOO FAST` |
-| Sink rate under 6 m/s | `HARD LANDING` |
-| Wings within ~11° of level | `WING DOWN` |
-| Aligned within ~20° of the runway | `CRABBED` |
+| Surface | Max impact | Max speed | Max bank | Max drift |
+| --- | --- | --- | --- | --- |
+| Runway | 4.5 m/s | 324 km/h | 11° | 20° |
+| Grass | 3.0 m/s | 252 km/h | 10° | 20° |
+| Rough / rock | 1.8 m/s | 162 km/h | 7° | 17° |
+
+A landing is accepted when the gear is down, the aircraft is on a dry surface,
+and it is inside the limits for that surface. Grass and open fields are
+landable, so a gentle arrival beside the runway no longer ends the flight.
+Landing on water ditches the aircraft. A slope too steep for the surface is
+refused, and flying into rising ground is a terrain impact. Touchdowns in the
+top quarter of a surface's impact limit are reported as a **firm landing**.
+
+Impact is measured as closing speed along the surface normal, not only as
+vertical speed. That means flying level into rising ground registers as a hard
+arrival even when the altimeter is steady, and landing uphill uses a little
+more of the available travel than landing on the flat.
+
+Once down you can brake with `X`, steer with the rudder, and take off again by
+holding `S` above ~198 km/h. The aircraft keeps its momentum on touchdown; the
+tyres pull it straight instead of snapping it onto the runway heading. Surface
+handling matters: grass rolls harder and has less grip, and rough ground stops
+you quickly. Taxiing off the pavement at taxi pace is harmless — the HUD shows
+`SURFACE GRASS` — while leaving it above about 108 km/h is a runway excursion.
+Entering rough ground above ~43 km/h breaks the gear, and very steep ground
+will dig in. The nosewheel steers like a bicycle: it needs forward speed to
+turn, is tight at taxi pace, and is limited by tyre grip at speed, so a hard
+turn will slide a little.
 
 Woods are solid. Spruce, pine, oak, poplar and birch stand at different sizes.
 Near trees are low-poly volumes — a trunk prism under a canopy of lit, faceted
 polygonal tiers — and collapse to a silhouette at distance. Flying into one
 ends the flight (`HIT TREE`); the strike test sweeps the whole frame's movement
 so a fast aircraft cannot slip between frames.
-
-Once down you can brake with `X`, steer with the rudder, and take off again by
-holding `S` above ~198 km/h. Rolling off the pavement faster than 65 km/h
-breaks the aircraft (`RAN OFF RUNWAY`). The nosewheel steers like a bicycle:
-it needs forward speed to turn, is tight at taxi pace, and is limited by tyre
-grip at speed, so a hard turn will slide a little.
 
 ## Project layout
 
@@ -75,9 +89,10 @@ flight/
     ├── config.js       every tunable constant in one place
     ├── math.js         vector / quaternion helpers
     ├── physics.js      point-mass bodies: forces → acceleration → velocity
+    ├── propulsion.js   engine power, propeller thrust, density lapse
     ├── aero.js         air density, lift curve, drag polar, aerodynamic forces
     ├── input.js        keyboard → normalised control axes
-    ├── world.js        heightfield, airfield plateau, sea surface, colours
+    ├── world.js        heightfield, airfield plateau, sea surface, surface types, colours
     ├── aircraft.js     flight model, gear, landing, crash reasons
     ├── camera.js       cockpit camera, projection and near-plane clipping
     ├── sky.js          horizon, sky gradient and sun
@@ -122,16 +137,22 @@ put, and the inertia differences produce real gyroscopic coupling between
 pitch, roll and yaw. The pitch stability moment holds a trim angle of attack,
 and the yaw stability moment weathervanes the nose into the relative wind.
 
-The throttle is a lever, not a thrust slider. The engine spools towards it with
-separate opening and closing lags, and available thrust falls with air density
-and at high forward speed, so climbing into thin air or opening the throttle
-takes time to show up at the wing. On the ground the same body is used again:
-thrust, parasite drag, rolling resistance, brakes and lateral tyre grip act as
+The throttle commands shaft power, not thrust. The engine spools towards the
+lever with separate opening and closing lags, and its power falls in proportion
+to air density. The propeller turns that power into thrust two ways: at low
+speed momentum theory caps it at the static thrust of the disc, while in forward
+flight the same power can only do `η·P/V` work. The smaller of the two is used,
+which gives strong, near-constant acceleration during the take-off roll and a
+natural `1/V` thrust lapse towards cruise. Full throttle in thin air, or opening
+it at speed, therefore takes time to show up at the wing. On the ground the same
+body is used again: thrust, gravity down the local slope, parasite drag,
+surface-dependent rolling resistance, brakes and lateral tyre grip act as
 forces, while a bicycle model steers the nosewheel. Yaw rate comes from forward
 speed and wheel angle, capped by available grip, so taxi turns are tight,
 high-speed turns are gentle, and the aircraft keeps its momentum through a turn
-instead of snapping onto a new heading. Spring/damper landing gear is the
-natural next step.
+instead of snapping onto a new heading. The ground pose follows the terrain
+slope as well as the heading. Spring/damper landing gear is the natural next
+step.
 
 The sea is flat. `terrainHeight` still describes the seabed — hills and all —
 but cells whose four corners are below `SEA_LEVEL` are drawn from a flat plane

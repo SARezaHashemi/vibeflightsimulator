@@ -91,6 +91,68 @@ export function surfaceHeight(x, z) {
   return Math.max(terrainHeight(x, z), SEA_LEVEL);
 }
 
+/* --------------------------------------------------------------- surfaces */
+
+/** What the wheels and the keel are touching. */
+export const SURFACE = Object.freeze({
+  RUNWAY: 'runway',
+  GRASS: 'grass',
+  ROUGH: 'rough',
+  WATER: 'water',
+});
+
+const ROUGH_SLOPE = 0.14;   // rise/run; steeper than this is broken ground
+const ROUGH_HEIGHT = 200;   // m above sea level; matches the rocky colour band
+
+/** Terrain slope in metres of rise per metre travelled, by central difference. */
+export function terrainGradient(x, z, step = 8) {
+  return {
+    x: (terrainHeight(x + step, z) - terrainHeight(x - step, z)) / (2 * step),
+    z: (terrainHeight(x, z + step) - terrainHeight(x, z - step)) / (2 * step),
+  };
+}
+
+/**
+ * Classify the surface under a point and measure its local slope.
+ *
+ * The runway is the only paved surface. Dry land is grass on gentle low
+ * ground and rough on steep or high rocky ground. Water is flat and solid for
+ * collision purposes, but it is not a surface an aircraft can roll on.
+ *
+ * The returned `normal` is a unit vector pointing out of the surface. Landing
+ * impact is measured along it, so a level aircraft flying into a hillside has
+ * a large closing speed even when its vertical speed is zero.
+ */
+export function surfaceAt(x, z) {
+  const ground = terrainHeight(x, z);
+  if (ground <= SEA_LEVEL) {
+    return {
+      kind: SURFACE.WATER,
+      height: SEA_LEVEL,
+      slope: 0,
+      gradient: { x: 0, z: 0 },
+      normal: { x: 0, y: 1, z: 0 },
+    };
+  }
+
+  const gradient = terrainGradient(x, z);
+  const slope = Math.hypot(gradient.x, gradient.z);
+  const inv = 1 / Math.hypot(gradient.x, 1, gradient.z);
+
+  let kind;
+  if (isOnRunway(x, z, 1)) kind = SURFACE.RUNWAY;
+  else if (ground > ROUGH_HEIGHT || slope > ROUGH_SLOPE) kind = SURFACE.ROUGH;
+  else kind = SURFACE.GRASS;
+
+  return {
+    kind,
+    height: Math.max(ground, SEA_LEVEL),
+    slope,
+    gradient,
+    normal: { x: -gradient.x * inv, y: inv, z: -gradient.z * inv },
+  };
+}
+
 /**
  * Height of the sea surface at a world position, in metres.
  *

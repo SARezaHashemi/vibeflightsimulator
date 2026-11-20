@@ -133,9 +133,9 @@ public class SceneryGen
         mb.AddQuad(new[]
         {
             Point(airport, taxiAlong - 16, side > 0 ? halfWidth : -apronNear),
-            Point(airport, taxiAlong + 16, side > 0 ? halfWidth : -apronNear),
-            Point(airport, taxiAlong + 16, side > 0 ? apronNear : -halfWidth),
             Point(airport, taxiAlong - 16, side > 0 ? apronNear : -halfWidth),
+            Point(airport, taxiAlong + 16, side > 0 ? apronNear : -halfWidth),
+            Point(airport, taxiAlong + 16, side > 0 ? halfWidth : -apronNear),
         }, asphalt);
 
         // Apron slab.
@@ -146,9 +146,9 @@ public class SceneryGen
         mb.AddQuad(new[]
         {
             Point(airport, along0, a0),
-            Point(airport, along1, a0),
-            Point(airport, along1, a1),
             Point(airport, along0, a1),
+            Point(airport, along1, a1),
+            Point(airport, along1, a0),
         }, concrete);
 
         // Hangar.

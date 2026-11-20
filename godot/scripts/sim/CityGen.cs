@@ -176,6 +176,10 @@ public static class CityGen
                 corners[idx] = new Vector3(worldCorners[idx].X, ground + STREET_LIFT, worldCorners[idx].Y);
             }
 
+            // Wind the quad up-facing: callers list corners in (+a, then +b)
+            // order, which faces down in a Y-up system, so reverse them.
+            System.Array.Reverse(corners);
+
             // No asphalt on the water: coastal blocks stop at the shore.
             foreach (Vector3 corner in corners)
             {

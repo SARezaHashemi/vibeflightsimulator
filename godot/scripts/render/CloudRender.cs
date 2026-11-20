@@ -45,11 +45,13 @@ public class CloudRender
                 Vector3 c = Point(i + 1, j + 1);
                 Vector3 d = Point(i, j + 1);
 
-                foreach (var tri in new[] { (a, b, c), (a, c, d) })
+                foreach (var tri in new[] { (a, d, c), (a, c, b) })
                 {
                     // Pure white where the sun hits, cool blue-grey under the
                     // base: the gradient is albedo, the sun does the shading,
                     // so the puffs separate cleanly from the hazy horizon.
+                    // (Wound θ↑φ↑ the normals would point inward, lighting the
+                    // clouds from underneath — hence the reversal.)
                     float meanY = (tri.Item1.Y + tri.Item2.Y + tri.Item3.Y) / 3f;
                     float vertical = QMath.Clamp(
                         0.25f + (meanY - (centre.Y - radius)) / (2 * radius) * 0.75f, 0f, 1f);

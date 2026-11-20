@@ -209,7 +209,9 @@ public static class Config
     public const float SEA_LEVEL = 0f;
 
     // Direction the sun sits in the sky (used by the light and any baked shading).
-    public static readonly Vector3 SUN_DIR = new(-0.55f, 0.47f, -0.69f);
+    // ~44° elevation: high enough that up-facing surfaces (cloud tops, wing
+    // tops) clearly out-shine the ambient fill from any heading.
+    public static readonly Vector3 SUN_DIR = new(-0.45f, 0.70f, -0.56f);
 
     /* ---- clouds ------------------------------------------------------------ */
     public const float CLOUD_CELL = 1600f;

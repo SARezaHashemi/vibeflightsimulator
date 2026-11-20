@@ -1,22 +1,26 @@
 # Mini Flight
 
-A tiny, dependency-free flight simulator that runs in the browser. Everything
-is drawn with the 2D canvas API — no WebGL, no libraries, no build step.
-
-You start on final approach to a small airfield, with a graded plateau, a
-1.7 km runway and a pair of snow-capped mountains to navigate by.
+A tiny flight simulator built for **Godot 4 (.NET / C#)**. It starts on final
+approach to a small airfield, with a graded plateau, a
+1.7 km runway and a pair of snow-capped mountains to navigate by. The world
+keeps going in every direction: more airfields, towns and cities grow on a
+deterministic hash grid, so the same skyline is always in the same place.
 
 ## Running it
 
-The source is split into ES modules, so it must be served over HTTP (browsers
-refuse to load modules from `file://`). Any static server will do:
+Requires Godot 4.7 (.NET edition) and a .NET SDK:
 
 ```sh
-cd flight
-python3 -m http.server 8123
+cd godot
+dotnet build
+godot-mono-rc        # or your own Godot 4.7 mono binary
 ```
 
-Then open <http://localhost:8123>.
+A headless smoke test that prints one telemetry line per simulated second:
+
+```sh
+godot-mono-rc --headless -- --sim-debug --quit-after 600
+```
 
 ## Controls
 
@@ -28,6 +32,7 @@ Then open <http://localhost:8123>.
 | `Q` `E` | rudder, and nosewheel steering on the ground |
 | `Shift` / `X` | throttle up / down — `X` is the brake on the ground |
 | `G` | raise or lower the landing gear |
+| `C` | chase / cockpit view |
 | `R` | restart after a crash |
 
 ## Flying and landing
@@ -77,45 +82,80 @@ polygonal tiers — and collapse to a silhouette at distance. Flying into one
 ends the flight (`HIT TREE`); the strike test sweeps the whole frame's movement
 so a fast aircraft cannot slip between frames.
 
+## Airfields and cities
+
+Airfields repeat every 10 km or so across the world. Each one is graded into a
+flat plateau with its own heading, runway length and elevation, and comes with
+a taxiway, apron, hangar and control tower. Every runway is a real landing
+surface, and the HUD's runway guide points at the nearest one. Trees and cities
+keep their distance from the approach paths.
+
+Cities sit on their own 8 km grid, mostly on dry, gently sloping ground. Each
+city turns its street grid through a random angle and fills the blocks between
+the roads with randomly sized buildings: low-rise blocks on the outskirts,
+denser mid-rise towards the centre and the occasional 250 m tower downtown.
+Streets are ground polygons that follow the terrain, so they climb the hills
+rather than cutting through them; buildings are faceted boxes that sink a
+little foundation into the ground. Flying into a building ends the flight
+(`HIT BUILDING`). Both the airfields and the cities are seeded from their grid
+cell, so they do not change when you fly back.
+
+Clouds are clusters of pale, faceted puffs. Each puff is a low-poly billboard:
+an irregular rim of flat-shaded triangles around a raised hub, with the
+underside clamped flat so the cluster sits on a common cloud base. Facets are
+lit from above and left, giving the chunky, crystalline look of a low-poly
+model, while haze thins them towards the edge of the draw distance.
+
 ## Project layout
 
 ```
 flight/
-├── index.html          page shell
-├── css/
-│   └── style.css       page reset and canvas layout
-└── js/
-    ├── main.js         bootstrap and frame loop
-    ├── config.js       every tunable constant in one place
-    ├── math.js         vector / quaternion helpers
-    ├── physics.js      point-mass bodies: forces → acceleration → velocity
-    ├── propulsion.js   engine power, propeller thrust, density lapse
-    ├── aero.js         air density, lift curve, drag polar, aerodynamic forces
-    ├── input.js        keyboard → normalised control axes
-    ├── world.js        heightfield, airfield plateau, sea surface, surface types, colours
-    ├── aircraft.js     flight model, gear, landing, crash reasons
-    ├── camera.js       cockpit camera, projection and near-plane clipping
-    ├── sky.js          horizon, sky gradient and sun
-    ├── terrain.js      grid mesh, painter's sort, shading, haze
-    ├── scenery.js      the runway and its markings
-    ├── trees.js        procedural woods, species, tree strikes, depth-sorted
-    ├── clouds.js       cloud puffs, depth-sorted with the terrain
-    └── hud.js          head-up display
+└── godot/                  the Godot 4 (.NET / C#) project
+    ├── project.godot       engine config, main scene
+    ├── scenes/Main.tscn    one-node scene; everything else is built in code
+    └── scripts/
+        ├── Main.cs         bootstrap, frame loop, cameras
+        ├── sim/            the simulation — engine-agnostic C#
+        │   ├── Config.cs   every tunable constant in one place
+        │   ├── QMath.cs    vector / quaternion helpers
+        │   ├── Body.cs     point-mass physics: forces → acceleration → velocity
+        │   ├── Aero.cs     lift curve, drag polar, aerodynamic forces
+        │   ├── Propulsion.cs  engine power, propeller thrust, density lapse
+        │   ├── WorldSim.cs heightfield, airfield plateaus, sea, surface types
+        │   ├── TreeGen.cs  procedural woods and tree strikes
+        │   ├── CityGen.cs  street grids, buildings and building strikes
+        │   ├── Aircraft.cs flight model, gear, landing, crash reasons
+        │   └── InputRig.cs keyboard → normalised control axes
+        └── render/         Godot-side presentation
+            ├── MeshBuilder.cs   flat-shaded, vertex-coloured mesh helper
+            ├── TerrainMesh.cs   dynamic grid mesh and water cells
+            ├── SceneryGen.cs    runways, aprons, hangars, towers
+            ├── CityRender.cs    street meshes and building MultiMeshes
+            ├── TreeRender.cs    one MultiMesh per species
+            ├── CloudRender.cs   cached low-poly cloud clusters
+            ├── AircraftModel.cs the low-poly airframe
+            └── Hud.cs           head-up display
 ```
 
 ### How it fits together
 
-`main.js` owns the loop. Each frame it asks `Input` for the four control
-axes, hands them to `Aircraft.update()` (the only place that mutates the
-simulation), points `Camera` at the aircraft, and then draws: sky → terrain
-(+ runway, trees and clouds) → HUD.
+`Main.cs` owns the loop. Each physics tick it asks `InputRig` for the four
+control axes and hands them to `Aircraft.Update()` (the only place that
+mutates the simulation). Each rendered frame it points the camera at the
+aircraft, then refreshes the scene: terrain → airfields, cities, trees and
+clouds → the aircraft model → the HUD.
+
+The simulation in `scripts/sim/` is engine-agnostic C# and never touches
+Godot nodes; `scripts/render/` reads the aircraft, world and camera and
+builds the 3D scene from them. See `godot/README.md` for how each renderer
+maps to what it draws.
 
 ### Physics
 
-In the air the aircraft's translation is a point mass. Each frame `Aircraft`
-clears its body's forces, adds gravity and thrust, then lets `aero.js` add the
+In the air the aircraft's translation is a point mass. Each step `Aircraft`
+clears its body's forces, adds gravity and thrust, then lets `Aero` add the
 wing's lift, the drag polar and the side force from sideslip, before
-`Body.step()` integrates velocity and position with velocity Verlet. That
+`Body.Step()` integrates velocity and position with velocity Verlet. That
 integrator conserves ballistic mechanical energy exactly, so under gravity the
 only energy changes come from the real work done by thrust and drag.
 
@@ -154,7 +194,7 @@ instead of snapping onto a new heading. The ground pose follows the terrain
 slope as well as the heading. Spring/damper landing gear is the natural next
 step.
 
-The sea is flat. `terrainHeight` still describes the seabed — hills and all —
+The sea is flat. `TerrainHeight` still describes the seabed — hills and all —
 but cells whose four corners are below `SEA_LEVEL` are drawn from a flat plane
 at sea level instead of from the ground beneath. Three long, shallow sines
 anchored to world coordinates and advanced by the frame time ripple that plane,
@@ -166,14 +206,15 @@ collision, altitude above ground, camera clearance — `surfaceHeight` takes the
 higher of the ground and the sea, so the flat water is solid and not a hole down
 to the sea floor.
 
-The runway is flat geometry sitting on the terrain, so it is projected through
-the camera as world-space quads (clipped against the near plane, which matters
-when it is under your wheels) and handed to the terrain renderer as a *layer*.
-The renderer slots it into its back-to-front painter order by depth, so hills
-in front of the airfield still occlude it correctly.
+Airfield surfaces are flat geometry sitting on their graded plateaus, and the
+sea, streets and runways alike are vertex-coloured meshes drawn by Godot's 3D
+renderer, so occlusion falls out of the depth buffer: hills in front of an
+airfield hide it correctly, and buildings are sorted by the GPU rather than by
+hand. City streets are ground polygons that follow the terrain, bucketed into
+a cached mesh per city, while buildings are instanced boxes in one MultiMesh.
 
-Renderers never touch simulation state; they read the aircraft and camera
-only. Tuning the feel of the aircraft is therefore a matter of editing
-`js/config.js` — thrust, drag, control rates, landing tolerances, gear travel
-and the palette all live in that one table.
+Renderers never touch simulation state; they read the aircraft and world only.
+Tuning the feel of the aircraft is therefore a matter of editing one table —
+`godot/scripts/sim/Config.cs`. Thrust, drag, control rates, landing
+tolerances, gear travel and the palette all live there.
 # vibeflightsimulator

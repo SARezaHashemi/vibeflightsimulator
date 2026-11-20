@@ -79,19 +79,19 @@ public static class TreeGen
     {
         new() { Profile = SPRUCE, Tiers = SPRUCE_TIERS, CanopyBase = 0.18f,
                 HeightMin = 0.85f, HeightMax = 1.30f, WidthMin = 0.80f, WidthMax = 1.00f,
-                Tint = new Vector3(58, 100, 54) },
+                Tint = new Vector3(46, 108, 56) },
         new() { Profile = PINE, Tiers = PINE_TIERS, CanopyBase = 0.34f,
                 HeightMin = 0.95f, HeightMax = 1.40f, WidthMin = 0.62f, WidthMax = 0.80f,
-                Tint = new Vector3(64, 106, 50) },
+                Tint = new Vector3(54, 116, 46) },
         new() { Profile = OAK, Tiers = null, CanopyBase = 0.30f,
                 HeightMin = 0.62f, HeightMax = 1.00f, WidthMin = 0.95f, WidthMax = 1.22f,
-                Tint = new Vector3(90, 130, 56) },
+                Tint = new Vector3(88, 140, 46) },
         new() { Profile = POPLAR, Tiers = null, CanopyBase = 0.22f,
                 HeightMin = 0.90f, HeightMax = 1.28f, WidthMin = 0.55f, WidthMax = 0.72f,
-                Tint = new Vector3(84, 136, 58) },
+                Tint = new Vector3(78, 148, 54) },
         new() { Profile = BIRCH, Tiers = null, CanopyBase = 0.36f,
                 HeightMin = 0.52f, HeightMax = 0.84f, WidthMin = 0.60f, WidthMax = 0.80f,
-                Tint = new Vector3(114, 148, 68) },
+                Tint = new Vector3(120, 160, 60) },
     };
 
     static TreeGen()

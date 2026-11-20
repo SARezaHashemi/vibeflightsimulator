@@ -13,6 +13,7 @@ public class TerrainMesh
     private const int M = 2 * Config.GRID_RADIUS + 1;  // grid points per axis
     private const int CELLS = M - 1;                   // quads per axis
     private const float DITHER_WAVELENGTH = 120f;
+    private const float PATCH_WAVELENGTH = 520f;
 
     private readonly MeshInstance3D _node;
     private readonly ArrayMesh _mesh = new();
@@ -46,10 +47,10 @@ public class TerrainMesh
      * Smooth value noise anchored to world coordinates — cheap per-cell
      * break-up so large flat areas are not dead flat.
      */
-    private static float Dither(float x, float z)
+    private static float Dither(float x, float z, float wavelength)
     {
-        float fx = x / DITHER_WAVELENGTH;
-        float fz = z / DITHER_WAVELENGTH;
+        float fx = x / wavelength;
+        float fz = z / wavelength;
         int ix = Mathf.FloorToInt(fx);
         int iz = Mathf.FloorToInt(fz);
         float tx = fx - ix;
@@ -134,6 +135,7 @@ public class TerrainMesh
                     float dist = Mathf.Sqrt((midX - eye.X) * (midX - eye.X) + (midZ - eye.Z) * (midZ - eye.Z));
                     int segments = dist < 1600 ? 2 : 1;
                     float step = cell / segments;
+                    float seabed = (_ground[a] + _ground[b] + _ground[c] + _ground[d]) * 0.25f;
 
                     for (int si = 0; si < segments; si++)
                     {
@@ -141,7 +143,7 @@ public class TerrainMesh
                         {
                             float wx = cellX + si * step;
                             float wz = cellZ + sj * step;
-                            v = EmitWaterQuad(v, wx, wz, step, time, eye);
+                            v = EmitWaterQuad(v, wx, wz, step, time, seabed);
                         }
                     }
                     continue;
@@ -153,14 +155,39 @@ public class TerrainMesh
                 Vector3 n = new(-(hb - ha) * cell, cell * cell, -(hd - ha) * cell);
                 n /= n.Length();
                 float lambert = n.Dot(Config.SUN_DIR);
-                float shade = QMath.Clamp(0.64f + 0.50f * (lambert * 0.5f + 0.5f), 0.56f, 1.16f);
+                float shade = QMath.Clamp(0.60f + 0.62f * (lambert * 0.5f + 0.5f), 0.50f, 1.24f);
 
                 float avgGround = (_ground[a] + _ground[b] + _ground[c] + _ground[d]) * 0.25f;
                 Color colour = WorldSim.SurfaceColor(avgGround);
 
+                // Large-scale meadow variation, so the grass country is a
+                // mosaic of lush pasture and dry patches instead of one flat
+                // green. Fades out towards the rock and snow lines.
+                if (avgGround > 2.5f && avgGround < 300f)
+                {
+                    float grassiness = QMath.Clamp(
+                        Mathf.Min((avgGround - 2.5f) / 25f, (300f - avgGround) / 80f), 0f, 1f);
+                    float patch = Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f, PATCH_WAVELENGTH);
+                    Color lush = new(44 / 255f, 124 / 255f, 50 / 255f);
+                    Color dry = new(148 / 255f, 146 / 255f, 84 / 255f);
+                    colour = colour.Lerp(lush.Lerp(dry, patch), grassiness * 0.55f);
+                }
+
+                // Steep faces show bare rock, grey under the snow line and
+                // blue-grey through the snowpack.
+                float slope = 1f - n.Y;
+                if (slope > 0.10f)
+                {
+                    float rockiness = QMath.Clamp((slope - 0.10f) / 0.20f, 0f, 1f) * 0.85f;
+                    Color rock = avgGround > 400
+                        ? new Color(176 / 255f, 178 / 255f, 188 / 255f)
+                        : new Color(136 / 255f, 126 / 255f, 104 / 255f);
+                    colour = colour.Lerp(rock, rockiness);
+                }
+
                 // Cheap per-cell break-up sampled from the cell's world
                 // position, so it stays put while the grid slides underneath.
-                float noise = 0.92f + Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f) * 0.16f;
+                float noise = 0.90f + Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f, DITHER_WAVELENGTH) * 0.20f;
                 float light = noise * shade;
                 colour = new Color(
                     Mathf.Clamp(colour.R * light, 0f, 1f),
@@ -192,7 +219,7 @@ public class TerrainMesh
         _mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
     }
 
-    private int EmitWaterQuad(int v, float wx, float wz, float step, float time, Vector3 eye)
+    private int EmitWaterQuad(int v, float wx, float wz, float step, float time, float seabed)
     {
         float wx1 = wx + step;
         float wz1 = wz + step;
@@ -210,8 +237,19 @@ public class TerrainMesh
 
         // Crests catch a lighter blue; troughs stay deep.
         float average = (ha + hb + hc + hd) * 0.25f;
-        float crest = QMath.Clamp((average - Config.SEA_LEVEL) / 0.8f + 0.5f, 0f, 1f);
+        float crest = QMath.Clamp((average - Config.SEA_LEVEL) / 0.55f + 0.5f, 0f, 1f);
         Vector3 rgb = Config.WATER + (Config.WATER_CREST - Config.WATER) * crest;
+
+        // Shallows over sand turn lagoon-green: the shallower the seabed, the
+        // more the sea floor shows through.
+        float depth = Config.SEA_LEVEL - seabed;
+        if (depth < 14)
+        {
+            float clear = QMath.Clamp(1 - depth / 14, 0f, 1f);
+            Vector3 lagoon = new(78, 172, 158);
+            rgb += (lagoon - rgb) * clear * 0.75f;
+        }
+
         Color colour = new(
             Mathf.Clamp(rgb.X * shade / 255f, 0f, 1f),
             Mathf.Clamp(rgb.Y * shade / 255f, 0f, 1f),

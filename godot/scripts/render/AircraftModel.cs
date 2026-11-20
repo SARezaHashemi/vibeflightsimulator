@@ -42,9 +42,11 @@ public class AircraftModel
         BuildAirframe(_body);
 
         BodyNode = new MeshInstance3D { Mesh = _body.Build(), MaterialOverride = Material };
+        // The gear is authored in body space, so it rides on the body node
+        // and inherits the aircraft's transform every frame.
         GearNode = new MeshInstance3D { Mesh = null, MaterialOverride = Material };
         parent.AddChild(BodyNode);
-        parent.AddChild(GearNode);
+        BodyNode.AddChild(GearNode);
     }
 
     // ------------------------------------------------------------- geometry

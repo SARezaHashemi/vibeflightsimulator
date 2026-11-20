@@ -181,10 +181,12 @@ public class TerrainMesh
                 QuadScratch[2] = new Vector3(cellX + cell, hc, cellZ + cell);
                 QuadScratch[3] = new Vector3(cellX, hd, cellZ + cell);
 
-                // Two triangles: a, b, c and a, c, d.
+                // Two triangles, wound counter-clockwise seen from above so
+                // the ground is a front face with its +Y normal: a, c, b and
+                // a, d, c.
                 for (int t = 0; t < 6; t++)
                 {
-                    int corner = t == 0 ? 0 : t == 1 ? 1 : t == 2 ? 2 : t == 3 ? 0 : t == 4 ? 2 : 3;
+                    int corner = t == 0 ? 0 : t == 1 ? 2 : t == 2 ? 1 : t == 3 ? 0 : t == 4 ? 3 : 2;
                     _vertices[v] = QuadScratch[corner];
                     _normals[v] = n;
                     _colors[v] = colour;
@@ -236,12 +238,13 @@ public class TerrainMesh
         Vector3 p2 = new(wx1, hc, wz1);
         Vector3 p3 = new(wx, hd, wz1);
 
+        // Wound counter-clockwise seen from above, matching the land quads.
         _vertices[v] = p0; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
         _vertices[v] = p1; _normals[v] = n; _colors[v] = colour; v++;
-        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
         _vertices[v] = p0; _normals[v] = n; _colors[v] = colour; v++;
-        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
         _vertices[v] = p3; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
         return v;
     }
 }

@@ -66,19 +66,32 @@ public partial class Main : Node3D
         };
         AddChild(new WorldEnvironment { Environment = environment });
 
-        // The sun itself, matching the direction the shading assumes
-        // (Config.SUN_DIR). Soft shadows out to the shadow distance.
+        // The sun, from Config.SUN_DIR (up, to the west and north).
+        //
+        // Two orientation facts about this build, both measured with a
+        // colour-keyed reference cube rather than assumed:
+        //  * the light is emitted along the node's local +Z axis, so +Z is
+        //    aimed at the ground, away from the sun;
+        //  * the terrain is one huge camera-following mesh, and Godot's
+        //    shadow pancaking flattens it into a shadow that covers
+        //    everything above the ground. Pancaking must therefore stay
+        //    off, and the split shadow mode handles the distance instead.
         var sun = new DirectionalLight3D
         {
             LightColor = Config.SUN_COLOR,
             LightEnergy = Config.SUN_ENERGY,
             ShadowEnabled = true,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
             DirectionalShadowMaxDistance = Config.SUN_SHADOW_MAX_DISTANCE,
             ShadowNormalBias = 2f,
+            DirectionalShadowPancakeSize = 0f,
         };
         AddChild(sun);
-        sun.LookAt(-Config.SUN_DIR);  // shine from the sun into the scene
+        Vector3 toSun = Config.SUN_DIR.Normalized();
+        Vector3 axisZ = -toSun;
+        Vector3 axisX = Vector3.Up.Cross(axisZ).Normalized();
+        Vector3 axisY = axisZ.Cross(axisX).Normalized();
+        sun.GlobalTransform = new Transform3D(new Basis(axisX, axisY, axisZ), Vector3.Zero);
 
         _camera = new Camera3D
         {
@@ -91,17 +104,6 @@ public partial class Main : Node3D
 
         _aircraft = new Aircraft();
         _input = new InputRig();
-
-        _lightTest = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--lighttest") >= 0;
-        if (_lightTest) BuildLightTestRig();
-
-        foreach (string arg in OS.GetCmdlineUserArgs())
-        {
-            if (arg.StartsWith("--shot="))
-                _shotPath = arg["--shot=".Length..];
-            if (arg == "--look=sun")
-                _lookSun = true;
-        }
 
         _terrain = new TerrainMesh(this);
         _scenery = new SceneryGen(this);
@@ -139,45 +141,6 @@ public partial class Main : Node3D
 
     private bool _simDebug = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--sim-debug") >= 0;
 
-    // Debug: --shot=/abs/path.png saves one screenshot then quits.
-    private string _shotPath;
-    private int _shotFrame = 12;
-    private bool _lookSun;
-    private bool _lightTest;
-    private Vector3 _rigCentre;
-
-    private void BuildLightTestRig()
-    {
-        // One grey box on a grey slab, photographed from the north-east.
-        // The sun sits north-west-up (Config.SUN_DIR), so the box's north
-        // face must render brighter than its east face, and the shadow must
-        // fall to the south-west. Anything else is a reversed light.
-        Vector3 rig = new(
-            _aircraft.Position.X,
-            WorldSim.SurfaceHeight(_aircraft.Position.X, _aircraft.Position.Z) + 0.2f,
-            _aircraft.Position.Z);
-        _rigCentre = rig;
-
-        var mb = new MeshBuilder();
-        Color grey = new(0.5f, 0.5f, 0.5f);
-
-        Vector3 Q(float x, float y, float z) => rig + new Vector3(x, y, z);
-
-        // slab
-        mb.AddQuad(new[] { Q(-100, 0, -100), Q(-100, 0, 100), Q(100, 0, 100), Q(100, 0, -100) }, grey);
-        // box, half extents 2 × 12 × 2, base on the slab, every face wound
-        // so its normal points outward
-        float hx = 2, hy = 12, hz = 2;
-        mb.AddQuad(new[] { Q(-hx, hy, -hz), Q(-hx, hy, hz), Q(hx, hy, hz), Q(hx, hy, -hz) }, grey); // top
-        mb.AddQuad(new[] { Q(hx, 0, -hz), Q(-hx, 0, -hz), Q(-hx, hy, -hz), Q(hx, hy, -hz) }, grey); // north
-        mb.AddQuad(new[] { Q(hx, 0, hz), Q(hx, 0, -hz), Q(hx, hy, -hz), Q(hx, hy, hz) }, grey);      // east
-        mb.AddQuad(new[] { Q(-hx, 0, hz), Q(hx, 0, hz), Q(hx, hy, hz), Q(-hx, hy, hz) }, grey);      // south
-        mb.AddQuad(new[] { Q(-hx, 0, -hz), Q(-hx, 0, hz), Q(-hx, hy, hz), Q(-hx, hy, -hz) }, grey);  // west
-
-        var node = new MeshInstance3D { Mesh = mb.Build() };
-        AddChild(node);
-    }
-
     private int _debugSecond;
 
     private bool SimDebugTick()
@@ -193,27 +156,6 @@ public partial class Main : Node3D
         float time = Time.GetTicksMsec() * 0.001f;
         Vector3 eye = UpdateCamera();
 
-        if (_lookSun)
-        {
-            // Debug view: face the sun's azimuth with the horizon in frame.
-            Vector3 f = new Vector3(-0.55f, 0.20f, -0.69f).Normalized();
-            Vector3 r = new Vector3(-f.Z, 0, f.X).Normalized();
-            Vector3 u = r.Cross(f).Normalized();
-            eye = _aircraft.Position + new Vector3(0, 2, 0);
-            _camera.GlobalTransform = new Transform3D(new Basis(r, u, -f), eye);
-        }
-
-        if (_lightTest)
-        {
-            // Debug view: the rig from the north-east, close up.
-            eye = _rigCentre + new Vector3(14, 18, -16);
-            Vector3 centre = _rigCentre + new Vector3(0, 5, 0);
-            Vector3 f = (centre - eye).Normalized();
-            Vector3 r = new Vector3(-f.Z, 0, f.X).Normalized();
-            Vector3 u = r.Cross(f).Normalized();
-            _camera.GlobalTransform = new Transform3D(new Basis(r, u, -f), eye);
-        }
-
         _terrain.Draw(eye, _aircraft.Position.Y, time);
         _scenery.Update(eye, TerrainMesh.DrawDistanceFor(_aircraft.Position.Y));
         _city.Update(eye, Config.CITY_MAX_DISTANCE);
@@ -225,13 +167,6 @@ public partial class Main : Node3D
         _model.HideGearWhenUp(_aircraft.GearPosition);
 
         _hud.QueueRedraw();
-
-        if (_shotPath != null && --_shotFrame <= 0)
-        {
-            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
-            GD.Print($"shot saved: {_shotPath}");
-            GetTree().Quit();
-        }
     }
 
     /**

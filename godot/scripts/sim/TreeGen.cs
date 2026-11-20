@@ -71,7 +71,7 @@ public static class TreeGen
         public float CanopyBase;
         public float HeightMin, HeightMax;
         public float WidthMin, WidthMax;
-        public Vector3 Tint;
+        public Color Tint;
         public float Crown;
     }
 
@@ -79,19 +79,19 @@ public static class TreeGen
     {
         new() { Profile = SPRUCE, Tiers = SPRUCE_TIERS, CanopyBase = 0.18f,
                 HeightMin = 0.85f, HeightMax = 1.30f, WidthMin = 0.80f, WidthMax = 1.00f,
-                Tint = new Vector3(46, 108, 56) },
+                Tint = Config.TREE_TINTS[0] },
         new() { Profile = PINE, Tiers = PINE_TIERS, CanopyBase = 0.34f,
                 HeightMin = 0.95f, HeightMax = 1.40f, WidthMin = 0.62f, WidthMax = 0.80f,
-                Tint = new Vector3(54, 116, 46) },
+                Tint = Config.TREE_TINTS[1] },
         new() { Profile = OAK, Tiers = null, CanopyBase = 0.30f,
                 HeightMin = 0.62f, HeightMax = 1.00f, WidthMin = 0.95f, WidthMax = 1.22f,
-                Tint = new Vector3(88, 140, 46) },
+                Tint = Config.TREE_TINTS[2] },
         new() { Profile = POPLAR, Tiers = null, CanopyBase = 0.22f,
                 HeightMin = 0.90f, HeightMax = 1.28f, WidthMin = 0.55f, WidthMax = 0.72f,
-                Tint = new Vector3(78, 148, 54) },
+                Tint = Config.TREE_TINTS[3] },
         new() { Profile = BIRCH, Tiers = null, CanopyBase = 0.36f,
                 HeightMin = 0.52f, HeightMax = 0.84f, WidthMin = 0.60f, WidthMax = 0.80f,
-                Tint = new Vector3(120, 160, 60) },
+                Tint = Config.TREE_TINTS[4] },
     };
 
     static TreeGen()
@@ -113,7 +113,7 @@ public static class TreeGen
         public float Shade;
         public float Spin;
         public float CanopyBase;
-        public Vector3 Tint;
+        public Color Tint;
         public float Radius; // cylinder used by the swept strike test
     }
 

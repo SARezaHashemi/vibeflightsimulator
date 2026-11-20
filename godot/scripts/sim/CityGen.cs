@@ -17,20 +17,6 @@ public static class CityGen
     private const float FOUNDATION = 2.5f;
     private const float STRIKE_MARGIN = 2.0f;
 
-    public static readonly Vector3 ASPHALT = new(78, 80, 84);
-    public static readonly Vector3 PARK = new(60, 104, 60);
-
-    public static readonly Vector3[] BUILDING_TINTS =
-    {
-        new(148, 148, 146),  // concrete
-        new(126, 132, 136),  // grey stone
-        new(158, 150, 134),  // sandstone
-        new(112, 122, 130),  // blue-grey glass
-        new(138, 126, 114),  // brick
-        new(168, 168, 162),  // pale render
-        new(104, 112, 120),  // dark steel
-    };
-
     public class City
     {
         public float X, Z, Radius, Angle, Block, Street, Ground;
@@ -40,13 +26,13 @@ public static class CityGen
     public class StreetQuad
     {
         public Vector3[] Corners;
-        public Vector3 Tint;
+        public Color Tint;
     }
 
     public class Building
     {
         public float X, Z, Ground, Width, Depth, Height, Angle;
-        public Vector3 Tint;
+        public Color Tint;
         public float Shade;
         public float Foundation;
         public float Radius; // rough plan radius for the swept strike test
@@ -181,7 +167,7 @@ public static class CityGen
             city.X + a * cos - b * sin,
             city.Z + a * sin + b * cos);
 
-        void AddQuad(Vector2[] worldCorners, Vector3 tint)
+        void AddQuad(Vector2[] worldCorners, Color tint)
         {
             var corners = new Vector3[4];
             for (int idx = 0; idx < 4; idx++)
@@ -199,7 +185,7 @@ public static class CityGen
             geometry.Grounds.Add(new StreetQuad { Corners = corners, Tint = tint });
         }
 
-        void AddGround(float a0, float a1, float b0, float b1, Vector3 tint)
+        void AddGround(float a0, float a1, float b0, float b1, Color tint)
         {
             AddQuad(new[] { ToWorld(a0, b0), ToWorld(a1, b0), ToWorld(a1, b1), ToWorld(a0, b1) }, tint);
         }
@@ -222,7 +208,7 @@ public static class CityGen
 
                 // Streets running along the city's first axis, and the cross
                 // streets along the other.
-                AddGround(a0, a1, offset - half, offset + half, ASPHALT);
+                AddGround(a0, a1, offset - half, offset + half, Config.CITY_ASPHALT);
 
                 AddQuad(new[]
                 {
@@ -230,7 +216,7 @@ public static class CityGen
                     ToWorld(offset + half, a0),
                     ToWorld(offset + half, a1),
                     ToWorld(offset - half, a1),
-                }, ASPHALT);
+                }, Config.CITY_ASPHALT);
             }
         }
 
@@ -250,7 +236,7 @@ public static class CityGen
                 if (roll < PARK_CHANCE)
                 {
                     float inset = block * 0.10f;
-                    AddGround(a0 + inset, a0 + block - inset, b0 + inset, b0 + block - inset, PARK);
+                    AddGround(a0 + inset, a0 + block - inset, b0 + inset, b0 + block - inset, Config.CITY_PARK);
                     continue;
                 }
 
@@ -299,8 +285,8 @@ public static class CityGen
                             a0 + (col + 0.5f) * lotWidth + jitterU,
                             b0 + (row + 0.5f) * lotDepth + jitterV);
 
-                        Vector3 tint = BUILDING_TINTS[
-                            Mathf.FloorToInt((float)WorldSim.Hash(seed, citySeed, 311) * BUILDING_TINTS.Length)];
+                        Color tint = Config.BUILDING_TINTS[
+                            Mathf.FloorToInt((float)WorldSim.Hash(seed, citySeed, 311) * Config.BUILDING_TINTS.Length)];
                         float shade = 0.86f + 0.28f * (float)WorldSim.Hash(seed, citySeed, 312);
 
                         // Sample the footprint corners; skip anything that dips

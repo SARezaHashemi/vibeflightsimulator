@@ -3,20 +3,23 @@ using Godot;
 
 /**
  * Small helper for building flat-shaded, vertex-coloured ArrayMeshes.
- * All world geometry (terrain, scenery, cities, trees, clouds) is unshaded
- * with its sun lighting baked into vertex colours, so the low-poly look of
- * the original canvas renderer carries over.
+ * All world geometry (terrain, scenery, cities, trees, clouds) goes through
+ * here. Faces get a flat normal per triangle — that is what gives the
+ * low-poly facets their crisp read under the directional sun.
  */
 public class MeshBuilder
 {
     private readonly List<Vector3> _vertices = new();
+    private readonly List<Vector3> _normals = new();
     private readonly List<Color> _colors = new();
 
     public int VertexCount => _vertices.Count;
 
     public void AddTriangle(Vector3 a, Vector3 b, Vector3 c, Color colour)
     {
+        Vector3 n = FaceNormal(new List<Vector3> { a, b, c });
         _vertices.Add(a); _vertices.Add(b); _vertices.Add(c);
+        _normals.Add(n); _normals.Add(n); _normals.Add(n);
         _colors.Add(colour); _colors.Add(colour); _colors.Add(colour);
     }
 
@@ -44,6 +47,7 @@ public class MeshBuilder
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = _vertices.ToArray();
+        arrays[(int)Mesh.ArrayType.Normal] = _normals.ToArray();
         arrays[(int)Mesh.ArrayType.Color] = _colors.ToArray();
 
         var mesh = new ArrayMesh();
@@ -51,14 +55,21 @@ public class MeshBuilder
         return mesh;
     }
 
-    /** Flat lambert lighting baked into a base colour. */
-    public static Color Lit(Vector3 baseRgb, float lambert, float ambient, float diffuse, float shade = 1f)
+    /**
+     * The one material for all low-poly world geometry: albedo from vertex
+     * colours, lit by the sun + ambient fill in Main, flat facets from the
+     * per-face normals.
+     */
+    public static StandardMaterial3D ShadedMaterial()
     {
-        float light = (ambient + diffuse * lambert) * shade;
-        return new Color(
-            Mathf.Clamp(baseRgb.X * light / 255f, 0f, 1f),
-            Mathf.Clamp(baseRgb.Y * light / 255f, 0f, 1f),
-            Mathf.Clamp(baseRgb.Z * light / 255f, 0f, 1f));
+        return new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.PerPixel,
+            VertexColorUseAsAlbedo = true,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            Roughness = 1f,
+            MetallicSpecular = 0.2f,   // keep the plasticky highlight off the paint
+        };
     }
 
     /** Newell's method: a stable normal for any (almost) planar polygon. */

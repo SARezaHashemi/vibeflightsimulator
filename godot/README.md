@@ -59,15 +59,16 @@ godot/
   axes, the bicycle-model nosewheel, and the landing/crash limits.
 - **Rendering** replaces the painter's-algorithm canvas with real 3D:
   - terrain is a single dynamic mesh rebuilt each frame around the eye,
-    snapped to world coordinates, with flat shading baked into vertex
-    colours (sun lambert + the colour dither);
+    snapped to world coordinates, flat-shaded with per-face normals; every
+    colour is plain albedo from the palette in `Config.cs`
   - water cells render from the rippling sea surface, not the seabed;
   - trees and buildings are `MultiMesh` instances (per-species tree meshes,
     unit-box buildings with per-instance tint);
   - runways, aprons and city streets are cached vertex-coloured meshes;
-  - distance haze comes from the `Environment` fog in the original's haze
-    colour; the sky is a `ProceduralSkyMaterial` matching the original
-    gradient.
+  - lighting is one warm directional sun with soft shadows out to 2.6 km
+    plus a cool blue ambient fill; distance haze starts far out and is
+    tinted toward the horizon sky; a filmic tone map and a mild
+    contrast/saturation grade finish the frame.
 - **Cameras**: chase and cockpit views are ported directly (the chase eye is
   clamped above the terrain, the cockpit eye sits inside the canopy).
 - **HUD** is drawn with a `Control._Draw()` override, matching the original

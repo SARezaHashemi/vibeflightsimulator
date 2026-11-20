@@ -11,16 +11,7 @@ public class CloudRender
 {
     private const float BASE_FLOOR = 0.45f;
 
-    private static readonly Vector3 LIGHT = new(-0.50f, 0.58f, 0.64f);
-    private static readonly Vector3 SHADE = new(172, 183, 198);  // deepest facet
-    private static readonly Vector3 LIT = new(252, 253, 255);    // sunlit crown
-
-    private static readonly StandardMaterial3D Material = new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+    private static readonly StandardMaterial3D Material = MeshBuilder.ShadedMaterial();
 
     private readonly Node3D _root;
     private readonly Dictionary<long, ArrayMesh> _clusterMeshes = new();
@@ -31,7 +22,7 @@ public class CloudRender
         _root = root;
     }
 
-    /** Low-poly dome: a lat/long sphere with per-face baked shading. */
+    /** Low-poly dome: a lat/long sphere with a vertical albedo gradient. */
     private static void AddDome(MeshBuilder mb, Vector3 centre, float radius)
     {
         const int lon = 8, lat = 4;
@@ -56,20 +47,14 @@ public class CloudRender
 
                 foreach (var tri in new[] { (a, b, c), (a, c, d) })
                 {
-                    var pts = new List<Vector3> { tri.Item1, tri.Item2, tri.Item3 };
-                    Vector3 n = MeshBuilder.FaceNormal(pts);
-                    float lambert = Mathf.Max(0, n.Dot(LIGHT));
-
-                    // Bright, sun-facing facets near the crown; cool grey
-                    // under the base.
+                    // Pure white where the sun hits, cool blue-grey under the
+                    // base: the gradient is albedo, the sun does the shading,
+                    // so the puffs separate cleanly from the hazy horizon.
                     float meanY = (tri.Item1.Y + tri.Item2.Y + tri.Item3.Y) / 3f;
-                    float vertical = QMath.Clamp(0.25f + (meanY - (centre.Y - radius)) / (2 * radius) * 0.75f, 0f, 1f);
-                    float light = QMath.Clamp(0.5f + 0.5f * lambert, 0f, 1f);
-                    float tone = QMath.Clamp(0.05f + 0.55f * vertical + 0.42f * light, 0f, 1f);
-
-                    Vector3 rgb = SHADE + (LIT - SHADE) * tone;
+                    float vertical = QMath.Clamp(
+                        0.25f + (meanY - (centre.Y - radius)) / (2 * radius) * 0.75f, 0f, 1f);
                     mb.AddTriangle(tri.Item1, tri.Item2, tri.Item3,
-                        new Color(rgb.X / 255f, rgb.Y / 255f, rgb.Z / 255f));
+                        Config.CLOUD_SHADE.Lerp(Config.CLOUD_LIT, vertical));
                 }
             }
         }

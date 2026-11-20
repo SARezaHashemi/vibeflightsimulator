@@ -9,14 +9,7 @@ using Godot;
  */
 public class TreeRender
 {
-    private static readonly Vector3 TRUNK = new(66, 50, 34);
-
-    private static readonly StandardMaterial3D Material = new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+    private static readonly StandardMaterial3D Material = MeshBuilder.ShadedMaterial();
 
     private readonly Node3D _root;
     private readonly MultiMeshInstance3D[] _species = new MultiMeshInstance3D[TreeGen.KINDS.Length];
@@ -38,7 +31,7 @@ public class TreeRender
             {
                 Multimesh = multi,
                 MaterialOverride = Material,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
             };
             _root.AddChild(_species[k]);
         }
@@ -69,25 +62,17 @@ public class TreeRender
         var mb = new MeshBuilder();
         int sides = 6;
         float spin = 0; // per-instance spin comes from the instance transform
-        Color tint = new(spec.Tint.X / 255f, spec.Tint.Y / 255f, spec.Tint.Z / 255f);
-        Color trunk = new(TRUNK.X / 255f, TRUNK.Y / 255f, TRUNK.Z / 255f);
+        Color tint = spec.Tint;
+        Color trunk = Config.TRUNK;
 
         void Push(Vector3[] points, Color colour)
         {
-            // Flat lambert lighting baked per face.
-            Vector3 n = MeshBuilder.FaceNormal(points);
-            float lambert = Mathf.Max(0, n.Dot(Config.SUN_DIR));
-            mb.AddQuad(points, MeshBuilder.Lit(new Vector3(colour.R, colour.G, colour.B) * 255f,
-                lambert, 0.54f, 0.56f));
+            mb.AddQuad(points, colour);
         }
 
         void PushTri(Vector3 a, Vector3 b, Vector3 c, Color colour)
         {
-            var tri = new List<Vector3> { a, b, c };
-            Vector3 n = MeshBuilder.FaceNormal(tri);
-            float lambert = Mathf.Max(0, n.Dot(Config.SUN_DIR));
-            mb.AddTriangle(a, b, c, MeshBuilder.Lit(new Vector3(colour.R, colour.G, colour.B) * 255f,
-                lambert, 0.54f, 0.56f));
+            mb.AddTriangle(a, b, c, colour);
         }
 
         if (spec.Tiers != null)

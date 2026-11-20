@@ -12,23 +12,18 @@ using Godot;
  */
 public class AircraftModel
 {
-    private static readonly Vector3 UPPER = new(235, 239, 244);  // top of the fuselage
-    private static readonly Vector3 SIDE = new(222, 228, 236);   // upper sides
-    private static readonly Vector3 BELLY = new(188, 196, 206);  // underside
-    private static readonly Vector3 ACCENT = new(196, 74, 62);   // cheat line
-    private static readonly Vector3 WING = new(214, 221, 230);
-    private static readonly Vector3 GLASS = new(36, 58, 80);
-    private static readonly Vector3 METAL = new(122, 128, 136);
-    private static readonly Vector3 TYRE = new(34, 35, 38);
+    private static readonly Color UPPER = Config.FUSELAGE_TOP;
+    private static readonly Color SIDE = Config.FUSELAGE_SIDE;
+    private static readonly Color BELLY = Config.FUSELAGE_BELLY;
+    private static readonly Color ACCENT = Config.FUSELAGE_ACCENT;
+    private static readonly Color WING = Config.WING_COLOUR;
+    private static readonly Color GLASS = Config.CANOPY_GLASS;
+    private static readonly Color METAL = Config.METAL;
+    private static readonly Color TYRE = Config.TYRE;
 
     private const float WHEEL_BOTTOM = -1.6f; // matches GEAR_HEIGHT
 
-    private static readonly StandardMaterial3D Material = new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+    private static readonly StandardMaterial3D Material = MeshBuilder.ShadedMaterial();
 
     private readonly MeshBuilder _body = new();
     private readonly MeshBuilder _gear = new();
@@ -77,7 +72,7 @@ public class AircraftModel
      * every face is the face centre minus the hull centre, which is correct
      * for any convex shape.
      */
-    private static void MakeSolid(MeshBuilder mb, List<Vector3> front, List<Vector3> back, Vector3 colour)
+    private static void MakeSolid(MeshBuilder mb, List<Vector3> front, List<Vector3> back, Color colour)
     {
         var all = new List<Vector3>(front);
         all.AddRange(back);
@@ -90,11 +85,8 @@ public class AircraftModel
             Vector3 n = FaceNormal(oriented);
             if (n.Dot(outward) < 0) oriented.Reverse();
 
-            Vector3 lit = colour * (0.64f + 0.46f * Mathf.Max(0, FaceNormal(oriented).Dot(Config.SUN_DIR)));
-            var c = new Color(Mathf.Clamp(lit.X / 255f, 0, 1), Mathf.Clamp(lit.Y / 255f, 0, 1), Mathf.Clamp(lit.Z / 255f, 0, 1));
-
-            if (oriented.Count == 4) mb.AddQuad(oriented, c);
-            else if (oriented.Count == 3) mb.AddTriangle(oriented[0], oriented[1], oriented[2], c);
+            if (oriented.Count == 4) mb.AddQuad(oriented, colour);
+            else if (oriented.Count == 3) mb.AddTriangle(oriented[0], oriented[1], oriented[2], colour);
         }
 
         Face(new List<Vector3>(front));
@@ -106,7 +98,7 @@ public class AircraftModel
         }
     }
 
-    private static void MakeBox(MeshBuilder mb, float cx, float cy, float cz, float hx, float hy, float hz, Vector3 colour)
+    private static void MakeBox(MeshBuilder mb, float cx, float cy, float cz, float hx, float hy, float hz, Color colour)
     {
         MakeSolid(mb,
             new List<Vector3>
@@ -127,7 +119,7 @@ public class AircraftModel
     }
 
     /** A wheel: a short octagonal cylinder lying along the body x axis. */
-    private static void MakeWheel(MeshBuilder mb, float cx, float cy, float cz, float radius, float halfWidth, Vector3 colour)
+    private static void MakeWheel(MeshBuilder mb, float cx, float cy, float cz, float radius, float halfWidth, Color colour)
     {
         var ring = new List<Vector3>();
         for (int i = 0; i < 8; i++)
@@ -172,7 +164,7 @@ public class AircraftModel
     };
 
     /** Panels are numbered from the upper right, going anticlockwise. */
-    private static Vector3 FuselageColour(int panel)
+    private static Color FuselageColour(int panel)
     {
         if (panel == 3 || panel == 7) return ACCENT;  // the flank stripe
         if (panel == 1) return UPPER;                 // the roof
@@ -205,12 +197,7 @@ public class AircraftModel
                 Vector3 n = FaceNormal(quad);
                 if (n.Dot(outward) < 0) quad.Reverse();
 
-                Vector3 colour = FuselageColour(k);
-                Vector3 lit = colour * (0.64f + 0.46f * Mathf.Max(0, FaceNormal(quad).Dot(Config.SUN_DIR)));
-                mb.AddQuad(quad, new Color(
-                    Mathf.Clamp(lit.X / 255f, 0, 1),
-                    Mathf.Clamp(lit.Y / 255f, 0, 1),
-                    Mathf.Clamp(lit.Z / 255f, 0, 1)));
+                mb.AddQuad(quad, FuselageColour(k));
             }
         }
 
@@ -218,14 +205,12 @@ public class AircraftModel
         {
             var cap = new List<Vector3>(rings[0]);
             if (FaceNormal(cap).Dot(new Vector3(0, -0.2f, -1)) < 0) cap.Reverse();
-            Vector3 lit = UPPER * (0.64f + 0.46f * Mathf.Max(0, FaceNormal(cap).Dot(Config.SUN_DIR)));
-            mb.AddFan(cap.ToArray(), new Color(lit.X / 255f, lit.Y / 255f, lit.Z / 255f));
+            mb.AddFan(cap.ToArray(), UPPER);
         }
         {
             var cap = new List<Vector3>(rings[^1]);
             if (FaceNormal(cap).Dot(new Vector3(0, 0.2f, 1)) < 0) cap.Reverse();
-            Vector3 lit = SIDE * (0.64f + 0.46f * Mathf.Max(0, FaceNormal(cap).Dot(Config.SUN_DIR)));
-            mb.AddFan(cap.ToArray(), new Color(lit.X / 255f, lit.Y / 255f, lit.Z / 255f), reverse: true);
+            mb.AddFan(cap.ToArray(), SIDE, reverse: true);
         }
 
         // Wings: tapered and with a little dihedral.

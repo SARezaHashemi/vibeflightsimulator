@@ -103,12 +103,112 @@ public static class Config
     public const float START_SPEED = 85f;
     public const float START_THROTTLE = 0.65f;
 
-    /* ---- palette ----------------------------------------------------------- */
-    public static readonly Color HAZE = new(198f / 255f, 220f / 255f, 236f / 255f);
-    public static readonly Vector3 WATER = new(26f, 78f, 118f);
-    public static readonly Vector3 WATER_CREST = new(74f, 132f, 158f);
+    /* ---- look & lighting -----------------------------------------------------
+       Every colour in the world is named here so the whole look can be tuned in
+       one place. All surface colours are plain albedo — the sun and ambient
+       lights (below) do the shading, so what you set is what you get under the
+       lit side; the ambient fill lifts the shaded side. */
+
+    /* sky */
+    public static readonly Color SKY_TOP = new(24f / 255f, 72f / 255f, 148f / 255f);
+    public static readonly Color SKY_HORIZON = new(235f / 255f, 230f / 255f, 219f / 255f);
+    public static readonly Color GROUND_BOTTOM = new(107f / 255f, 120f / 255f, 135f / 255f);
+    public const float SUN_DISC_ANGLE = 14f;   // angular size of the sun in the sky
+    public const float SUN_DISC_CURVE = 0.12f;
+
+    /* haze: distance fog tinted toward the horizon sky, kept for depth only */
+    public const float FOG_BEGIN = 2200f;      // m, where the haze starts
+    public const float FOG_END = 20000f;       // m, where it is full
+    public const float FOG_DEPTH_CURVE = 1.4f; // how quickly it builds
+    public static readonly Color FOG_COLOR = new(168f / 255f, 193f / 255f, 220f / 255f);
+    public const float FOG_SKY_AFFECT = 0.0f;  // the sky itself is never fogged
+
+    /* lights */
+    public static readonly Color SUN_COLOR = new(1.00f, 0.96f, 0.88f);  // slightly warm
+    public const float SUN_ENERGY = 1.2f;
+    public const float SUN_SHADOW_MAX_DISTANCE = 2600f;                 // m of soft shadows
+    public static readonly Color AMBIENT_COLOR = new(148f / 255f, 173f / 255f, 224f / 255f);  // cool blue fill
+    public const float AMBIENT_ENERGY = 0.75f;
+
+    /* tone mapping & grading */
+    public const float TONEMAP_WHITE = 4.0f;
+    public const float ADJUSTMENT_SATURATION = 1.12f;
+    public const float ADJUSTMENT_CONTRAST = 1.06f;
+
+    /* terrain height bands */
+    public static readonly Color WET_SAND = new(166f / 255f, 140f / 255f, 96f / 255f);
+    public static readonly Color BEACH_SAND = new(228f / 255f, 206f / 255f, 148f / 255f);
+    public static readonly Color DUNE_GRASS = new(154f / 255f, 172f / 255f, 92f / 255f);
+    public static readonly Color MEADOW = new(56f / 255f, 134f / 255f, 48f / 255f);
+    public static readonly Color PASTURE = new(48f / 255f, 134f / 255f, 44f / 255f);
+    public static readonly Color DRY_FIELD = new(152f / 255f, 150f / 255f, 64f / 255f);
+    public static readonly Color SCREE_LOW = new(128f / 255f, 118f / 255f, 92f / 255f);
+    public static readonly Color SCREE_HIGH = new(150f / 255f, 140f / 255f, 120f / 255f);
+    public static readonly Color ROCK = new(172f / 255f, 168f / 255f, 160f / 255f);
+    public static readonly Color SNOW_LOW = new(214f / 255f, 220f / 255f, 230f / 255f);
+    public static readonly Color SNOW_HIGH = new(244f / 255f, 248f / 255f, 252f / 255f);
+
+    /* per-face terrain modifiers */
+    public static readonly Color PATCH_LUSH = new(36f / 255f, 128f / 255f, 46f / 255f);   // deep green forests/pasture
+    public static readonly Color PATCH_DRY = new(170f / 255f, 164f / 255f, 72f / 255f);   // yellow-green fields
+    public static readonly Color SLOPE_ROCK = new(138f / 255f, 128f / 255f, 106f / 255f); // bare rock under the snow line
+    public static readonly Color SLOPE_ROCK_SNOW = new(180f / 255f, 184f / 255f, 194f / 255f);
+
+    /* water */
+    public static readonly Color WATER = new(28f / 255f, 88f / 255f, 134f / 255f);
+    public static readonly Color WATER_CREST = new(104f / 255f, 168f / 255f, 188f / 255f);
+    public static readonly Color WATER_LAGOON = new(86f / 255f, 178f / 255f, 164f / 255f);
+
+    /* trees */
+    public static readonly Color TRUNK = new(82f / 255f, 60f / 255f, 42f / 255f);
+    public static readonly Color[] TREE_TINTS =
+    {
+        new(38f / 255f, 112f / 255f, 50f / 255f),   // spruce
+        new(46f / 255f, 120f / 255f, 42f / 255f),   // pine
+        new(82f / 255f, 144f / 255f, 40f / 255f),   // oak
+        new(68f / 255f, 152f / 255f, 46f / 255f),   // poplar
+        new(128f / 255f, 168f / 255f, 54f / 255f),  // birch
+    };
+
+    /* clouds */
+    public static readonly Color CLOUD_LIT = new(252f / 255f, 253f / 255f, 255f / 255f);
+    public static readonly Color CLOUD_SHADE = new(178f / 255f, 192f / 255f, 208f / 255f);
+
+    /* aircraft */
+    public static readonly Color FUSELAGE_TOP = new(243f / 255f, 247f / 255f, 251f / 255f);
+    public static readonly Color FUSELAGE_SIDE = new(229f / 255f, 235f / 255f, 241f / 255f);
+    public static readonly Color FUSELAGE_BELLY = new(198f / 255f, 206f / 255f, 216f / 255f);
+    public static readonly Color FUSELAGE_ACCENT = new(214f / 255f, 40f / 255f, 34f / 255f);
+    public static readonly Color WING_COLOUR = new(224f / 255f, 231f / 255f, 238f / 255f);
+    public static readonly Color CANOPY_GLASS = new(36f / 255f, 58f / 255f, 80f / 255f);
+    public static readonly Color METAL = new(122f / 255f, 128f / 255f, 136f / 255f);
+    public static readonly Color TYRE = new(34f / 255f, 35f / 255f, 38f / 255f);
+
+    /* city */
+    public static readonly Color CITY_ASPHALT = new(78f / 255f, 80f / 255f, 84f / 255f);
+    public static readonly Color CITY_PARK = new(52f / 255f, 118f / 255f, 52f / 255f);
+    public static readonly Color[] BUILDING_TINTS =
+    {
+        new(148f / 255f, 148f / 255f, 146f / 255f),  // concrete
+        new(126f / 255f, 132f / 255f, 136f / 255f),  // grey stone
+        new(158f / 255f, 150f / 255f, 134f / 255f),  // sandstone
+        new(112f / 255f, 122f / 255f, 130f / 255f),  // blue-grey glass
+        new(138f / 255f, 126f / 255f, 114f / 255f),  // brick
+        new(168f / 255f, 168f / 255f, 162f / 255f),  // pale render
+        new(104f / 255f, 112f / 255f, 120f / 255f),  // dark steel
+    };
+
+    /* airport */
+    public static readonly Color RUNWAY_ASPHALT = new(56f / 255f, 58f / 255f, 62f / 255f);
+    public static readonly Color CONCRETE = new(104f / 255f, 104f / 255f, 100f / 255f);
+    public static readonly Color MARKING = new(240f / 255f, 240f / 255f, 230f / 255f);
+    public static readonly Color HANGAR = new(150f / 255f, 146f / 255f, 136f / 255f);
+    public static readonly Color TOWER = new(176f / 255f, 174f / 255f, 166f / 255f);
+    public static readonly Color TOWER_GLASS = new(112f / 255f, 138f / 255f, 154f / 255f);
+
     public const float SEA_LEVEL = 0f;
 
+    // Direction the sun sits in the sky (used by the light and any baked shading).
     public static readonly Vector3 SUN_DIR = new(-0.55f, 0.47f, -0.69f);
 
     /* ---- clouds ------------------------------------------------------------ */

@@ -8,12 +8,7 @@ using Godot;
  */
 public class CityRender
 {
-    private static readonly StandardMaterial3D Material = new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+    private static readonly StandardMaterial3D Material = MeshBuilder.ShadedMaterial();
 
     private static readonly BoxMesh UnitBox = new() { Size = new Vector3(1, 1, 1) };
 
@@ -54,17 +49,18 @@ public class CityRender
             var origin = new Vector3(b.X, b.Ground + b.Height * 0.5f - b.Foundation, b.Z);
             multi.SetInstanceTransform(i, new Transform3D(rotation, origin));
 
+            var tint = b.Tint * b.Shade;
             multi.SetInstanceColor(i, new Color(
-                Mathf.Clamp(b.Tint.X * b.Shade / 255f, 0, 1),
-                Mathf.Clamp(b.Tint.Y * b.Shade / 255f, 0, 1),
-                Mathf.Clamp(b.Tint.Z * b.Shade / 255f, 0, 1)));
+                Mathf.Clamp(tint.R, 0, 1),
+                Mathf.Clamp(tint.G, 0, 1),
+                Mathf.Clamp(tint.B, 0, 1)));
         }
 
         return new MultiMeshInstance3D
         {
             Multimesh = multi,
             MaterialOverride = Material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
     }
 
@@ -77,10 +73,7 @@ public class CityRender
         // climb the hills rather than cutting through them.
         var mb = new MeshBuilder();
         foreach (CityGen.StreetQuad ground in CityGen.GetGeometry(city).Grounds)
-        {
-            mb.AddQuad(ground.Corners, new Color(
-                ground.Tint.X / 255f, ground.Tint.Y / 255f, ground.Tint.Z / 255f));
-        }
+            mb.AddQuad(ground.Corners, ground.Tint);
 
         var nodes = new CityNodes
         {
@@ -88,7 +81,7 @@ public class CityRender
             {
                 Mesh = mb.Build(),
                 MaterialOverride = Material,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
             },
             Buildings = BuildBuildings(city),
         };

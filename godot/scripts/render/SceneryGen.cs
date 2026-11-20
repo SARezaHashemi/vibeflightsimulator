@@ -10,19 +10,7 @@ public class SceneryGen
 {
     private const float LIFT = 0.35f;
 
-    private static readonly Vector3 ASPHALT = new(56, 58, 62);
-    private static readonly Vector3 CONCRETE = new(104, 104, 100);
-    private static readonly Vector3 MARKING = new(226, 226, 216);
-    private static readonly Vector3 HANGAR = new(150, 146, 136);
-    private static readonly Vector3 TOWER = new(176, 174, 166);
-    private static readonly Vector3 GLASS = new(112, 138, 154);
-
-    private static readonly StandardMaterial3D Material = new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+    private static readonly StandardMaterial3D Material = MeshBuilder.ShadedMaterial();
 
     private readonly Node3D _root;
     private readonly Dictionary<long, MeshInstance3D> _instances = new();
@@ -40,9 +28,9 @@ public class SceneryGen
             airport.Z + airport.Along.Y * along + airport.Across.Y * across);
     }
 
-    /** A low-poly box with its sun shading baked into the vertex colours. */
+    /** A low-poly box; the sun light does the shading, so just albedo here. */
     private static void AddBox(MeshBuilder mb, float x, float ground, float z,
-        float width, float depth, float height, float angle, Vector3 tint, float shade, float foundation)
+        float width, float depth, float height, float angle, Color tint, float foundation)
     {
         float baseY = ground - foundation;
         float topY = ground + height;
@@ -70,22 +58,19 @@ public class SceneryGen
         {
             int j = (i + 1) % 4;
             var wall = new Vector3[] { baseRing[i], topRing[i], topRing[j], baseRing[j] };
-            Vector3 n = MeshBuilder.FaceNormal(wall);
-            float lambert = Mathf.Max(0, n.Dot(Config.SUN_DIR));
-            mb.AddQuad(wall, MeshBuilder.Lit(tint, lambert, 0.68f, 0.52f, shade));
+            mb.AddQuad(wall, tint);
         }
 
         // Roof, wound upwards.
-        mb.AddQuad(new[] { topRing[3], topRing[2], topRing[1], topRing[0] },
-            MeshBuilder.Lit(tint, 1, 0.68f, 0.52f, shade));
+        mb.AddQuad(new[] { topRing[3], topRing[2], topRing[1], topRing[0] }, tint);
     }
 
     private static void BuildRunway(MeshBuilder mb, WorldSim.Airport airport)
     {
         float halfLength = airport.Length / 2;
         float halfWidth = airport.Width / 2;
-        var colour = new Color(ASPHALT.X / 255f, ASPHALT.Y / 255f, ASPHALT.Z / 255f);
-        var marking = new Color(MARKING.X / 255f, MARKING.Y / 255f, MARKING.Z / 255f);
+        Color colour = Config.RUNWAY_ASPHALT;
+        Color marking = Config.MARKING;
 
         void Quad(float along0, float along1, float across0, float across1, Color c, float lift)
         {
@@ -137,8 +122,8 @@ public class SceneryGen
         float halfWidth = airport.Width / 2;
         float side = Mathf.Sin(airport.X * 0.0013f + airport.Z * 0.0007f) >= 0 ? 1 : -1;
 
-        var asphalt = new Color(ASPHALT.X / 255f, ASPHALT.Y / 255f, ASPHALT.Z / 255f);
-        var concrete = new Color(CONCRETE.X / 255f, CONCRETE.Y / 255f, CONCRETE.Z / 255f);
+        Color asphalt = Config.RUNWAY_ASPHALT;
+        Color concrete = Config.CONCRETE;
 
         float taxiAlong = -halfLength * 0.28f;
         float apronNear = halfWidth + 24;
@@ -170,16 +155,16 @@ public class SceneryGen
         Vector3 hangarCentre = Point(airport, taxiAlong + 80, side * (apronNear + 50));
         AddBox(mb, hangarCentre.X, airport.Elevation + LIFT, hangarCentre.Z,
             Mathf.Min(78, airport.Length * 0.07f), 42, 17,
-            airport.Heading + Mathf.Pi * 0.5f, HANGAR, 0.96f,
+            airport.Heading + Mathf.Pi * 0.5f, Config.HANGAR,
             Mathf.Min(6, 1.5f + 17 * 0.03f));
 
         // Control tower: a narrow shaft with a wider glass cab.
         Vector3 towerCentre = Point(airport, taxiAlong - 70, side * (apronNear + 44));
         AddBox(mb, towerCentre.X, airport.Elevation + LIFT, towerCentre.Z,
-            9, 9, 30, airport.Heading, TOWER, 0.92f,
+            9, 9, 30, airport.Heading, Config.TOWER,
             Mathf.Min(6, 1.5f + 30 * 0.03f));
         AddBox(mb, towerCentre.X, airport.Elevation + 30 + LIFT, towerCentre.Z,
-            16, 16, 7, airport.Heading, GLASS, 1.02f, 0);
+            16, 16, 7, airport.Heading, Config.TOWER_GLASS, 0);
     }
 
     private MeshInstance3D GetOrCreate(WorldSim.Airport airport)
@@ -191,7 +176,7 @@ public class SceneryGen
         BuildRunway(mb, airport);
         BuildBuildings(mb, airport);
 
-        var node = new MeshInstance3D { Mesh = mb.Build(), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        var node = new MeshInstance3D { Mesh = mb.Build(), CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
         node.MaterialOverride = Material;
         _root.AddChild(node);
         _instances[key] = node;

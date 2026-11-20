@@ -22,23 +22,18 @@ public class TerrainMesh
     // Worst case: every cell subdivided 2×2 (near water) = 4 quads of 6
     // vertices.
     private readonly Vector3[] _vertices = new Vector3[CELLS * CELLS * 24];
+    private readonly Vector3[] _normals = new Vector3[CELLS * CELLS * 24];
     private readonly Color[] _colors = new Color[CELLS * CELLS * 24];
     private readonly float[] _ground = new float[M * M];
     private readonly float[] _height = new float[M * M];
-    private readonly float[] _cellGround = new float[CELLS * CELLS]; // avg raw ground per cell
 
     private static readonly Vector3[] QuadScratch = new Vector3[4];
 
     public TerrainMesh(Node3D parent)
     {
-        _material = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            VertexColorUseAsAlbedo = true,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-        };
+        _material = MeshBuilder.ShadedMaterial();
 
-        _node = new MeshInstance3D { Mesh = _mesh, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        _node = new MeshInstance3D { Mesh = _mesh, CastShadow = GeometryInstance3D.ShadowCastingSetting.On };
         _node.MaterialOverride = _material;
         parent.AddChild(_node);
     }
@@ -79,15 +74,7 @@ public class TerrainMesh
         return CellSizeFor(altitude) * Config.GRID_RADIUS * 1.02f;
     }
 
-    /** Haze blend factor, 0 = clear, 1 = fully lost in the murk. */
-    public static float FogFactor(float distance, float drawDistance)
-    {
-        float t = QMath.Clamp(
-            (distance - drawDistance * Config.FOG_START) / (drawDistance * (1 - Config.FOG_START)),
-            0f, 1f);
-        return Mathf.Pow(t, Config.FOG_CURVE);
-    }
-
+    /** Rebuild the whole mesh around the eye for this frame. */
     /** Rebuild the whole mesh around the eye for this frame. */
     public void Draw(Vector3 eye, float altitude, float time)
     {
@@ -154,23 +141,21 @@ public class TerrainMesh
                 // Flat normal of the cell, from two of its edge vectors.
                 Vector3 n = new(-(hb - ha) * cell, cell * cell, -(hd - ha) * cell);
                 n /= n.Length();
-                float lambert = n.Dot(Config.SUN_DIR);
-                float shade = QMath.Clamp(0.60f + 0.62f * (lambert * 0.5f + 0.5f), 0.50f, 1.24f);
 
                 float avgGround = (_ground[a] + _ground[b] + _ground[c] + _ground[d]) * 0.25f;
                 Color colour = WorldSim.SurfaceColor(avgGround);
 
                 // Large-scale meadow variation, so the grass country is a
-                // mosaic of lush pasture and dry patches instead of one flat
-                // green. Fades out towards the rock and snow lines.
+                // mosaic of lush pasture and yellow-green dry fields instead
+                // of one flat green. Fades out towards the rock and snow
+                // lines.
                 if (avgGround > 2.5f && avgGround < 300f)
                 {
                     float grassiness = QMath.Clamp(
                         Mathf.Min((avgGround - 2.5f) / 25f, (300f - avgGround) / 80f), 0f, 1f);
                     float patch = Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f, PATCH_WAVELENGTH);
-                    Color lush = new(44 / 255f, 124 / 255f, 50 / 255f);
-                    Color dry = new(148 / 255f, 146 / 255f, 84 / 255f);
-                    colour = colour.Lerp(lush.Lerp(dry, patch), grassiness * 0.55f);
+                    colour = colour.Lerp(
+                        Config.PATCH_LUSH.Lerp(Config.PATCH_DRY, patch), grassiness * 0.55f);
                 }
 
                 // Steep faces show bare rock, grey under the snow line and
@@ -179,20 +164,17 @@ public class TerrainMesh
                 if (slope > 0.10f)
                 {
                     float rockiness = QMath.Clamp((slope - 0.10f) / 0.20f, 0f, 1f) * 0.85f;
-                    Color rock = avgGround > 400
-                        ? new Color(176 / 255f, 178 / 255f, 188 / 255f)
-                        : new Color(136 / 255f, 126 / 255f, 104 / 255f);
+                    Color rock = avgGround > 400 ? Config.SLOPE_ROCK_SNOW : Config.SLOPE_ROCK;
                     colour = colour.Lerp(rock, rockiness);
                 }
 
                 // Cheap per-cell break-up sampled from the cell's world
                 // position, so it stays put while the grid slides underneath.
-                float noise = 0.90f + Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f, DITHER_WAVELENGTH) * 0.20f;
-                float light = noise * shade;
+                float noise = 0.92f + Dither(cellX + cell * 0.5f, cellZ + cell * 0.5f, DITHER_WAVELENGTH) * 0.16f;
                 colour = new Color(
-                    Mathf.Clamp(colour.R * light, 0f, 1f),
-                    Mathf.Clamp(colour.G * light, 0f, 1f),
-                    Mathf.Clamp(colour.B * light, 0f, 1f));
+                    Mathf.Clamp(colour.R * noise, 0f, 1f),
+                    Mathf.Clamp(colour.G * noise, 0f, 1f),
+                    Mathf.Clamp(colour.B * noise, 0f, 1f));
 
                 QuadScratch[0] = new Vector3(cellX, ha, cellZ);
                 QuadScratch[1] = new Vector3(cellX + cell, hb, cellZ);
@@ -204,6 +186,7 @@ public class TerrainMesh
                 {
                     int corner = t == 0 ? 0 : t == 1 ? 1 : t == 2 ? 2 : t == 3 ? 0 : t == 4 ? 2 : 3;
                     _vertices[v] = QuadScratch[corner];
+                    _normals[v] = n;
                     _colors[v] = colour;
                     v++;
                 }
@@ -213,6 +196,7 @@ public class TerrainMesh
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = _vertices;
+        arrays[(int)Mesh.ArrayType.Normal] = _normals;
         arrays[(int)Mesh.ArrayType.Color] = _colors;
 
         _mesh.ClearSurfaces();
@@ -232,13 +216,11 @@ public class TerrainMesh
         // Facet normal from the same edge vectors the land uses.
         Vector3 n = new(-(hb - ha) * step, step * step, -(hd - ha) * step);
         n /= n.Length();
-        float lambert = n.Dot(Config.SUN_DIR);
-        float shade = QMath.Clamp(0.55f + 0.90f * (lambert * 0.5f + 0.5f), 0.52f, 1.24f);
 
         // Crests catch a lighter blue; troughs stay deep.
         float average = (ha + hb + hc + hd) * 0.25f;
         float crest = QMath.Clamp((average - Config.SEA_LEVEL) / 0.55f + 0.5f, 0f, 1f);
-        Vector3 rgb = Config.WATER + (Config.WATER_CREST - Config.WATER) * crest;
+        Color colour = Config.WATER.Lerp(Config.WATER_CREST, crest);
 
         // Shallows over sand turn lagoon-green: the shallower the seabed, the
         // more the sea floor shows through.
@@ -246,26 +228,20 @@ public class TerrainMesh
         if (depth < 14)
         {
             float clear = QMath.Clamp(1 - depth / 14, 0f, 1f);
-            Vector3 lagoon = new(78, 172, 158);
-            rgb += (lagoon - rgb) * clear * 0.75f;
+            colour = colour.Lerp(Config.WATER_LAGOON, clear * 0.75f);
         }
-
-        Color colour = new(
-            Mathf.Clamp(rgb.X * shade / 255f, 0f, 1f),
-            Mathf.Clamp(rgb.Y * shade / 255f, 0f, 1f),
-            Mathf.Clamp(rgb.Z * shade / 255f, 0f, 1f));
 
         Vector3 p0 = new(wx, ha, wz);
         Vector3 p1 = new(wx1, hb, wz);
         Vector3 p2 = new(wx1, hc, wz1);
         Vector3 p3 = new(wx, hd, wz1);
 
-        _vertices[v] = p0; _colors[v] = colour; v++;
-        _vertices[v] = p1; _colors[v] = colour; v++;
-        _vertices[v] = p2; _colors[v] = colour; v++;
-        _vertices[v] = p0; _colors[v] = colour; v++;
-        _vertices[v] = p2; _colors[v] = colour; v++;
-        _vertices[v] = p3; _colors[v] = colour; v++;
+        _vertices[v] = p0; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p1; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p0; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p2; _normals[v] = n; _colors[v] = colour; v++;
+        _vertices[v] = p3; _normals[v] = n; _colors[v] = colour; v++;
         return v;
     }
 }

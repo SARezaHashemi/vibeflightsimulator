@@ -338,62 +338,44 @@ public static class WorldSim
 
     /**
      * Base surface colour for a given height.
-     * Bands: water → wet sand → beach grass → meadow → hillside → rock → snow.
+     * Bands: water -> wet sand -> beach grass -> meadow -> hillside -> rock -> snow.
+     * All colours live in Config; the sun does the shading.
      */
     public static Color SurfaceColor(float h)
     {
-        if (h <= Config.SEA_LEVEL)
-            return new Color(Config.WATER.X / 255f, Config.WATER.Y / 255f, Config.WATER.Z / 255f);
+        if (h <= Config.SEA_LEVEL) return Config.WATER;
 
         // The strip at the waterline is darker: sand still wet from the tide.
         if (h < 2.5f)
-        {
-            float t = h / 2.5f;
-            return Mix(150 / 255f, 132 / 255f, 92 / 255f,   // wet sand
-                       216 / 255f, 196 / 255f, 142 / 255f,  // dry beach
-                       t);
-        }
-        else if (h < 9)
+            return Config.WET_SAND.Lerp(Config.BEACH_SAND, h / 2.5f);
+
+        if (h < 9f)
         {
             // Beach grass gives way to proper meadow.
-            float t = (h - 2.5f) / 6.5f;
-            return Mix(148 / 255f, 168 / 255f, 96 / 255f,   // dune grass
-                       62 / 255f, 124 / 255f, 54 / 255f,    // meadow green
-                       QMath.Clamp(t * 1.4f, 0f, 1f));
+            float t = QMath.Clamp((h - 2.5f) / 6.5f * 1.4f, 0f, 1f);
+            return Config.DUNE_GRASS.Lerp(Config.MEADOW, t);
         }
-        else if (h < 240)
+
+        if (h < 240f)
         {
             // Lush lowlands drying out towards the hill lines.
-            float t = (h - 9) / 231;
-            return Mix(58 / 255f, 126 / 255f, 52 / 255f,    // rich pasture
-                       128 / 255f, 140 / 255f, 72 / 255f,   // dry hillside
-                       t * t);
+            float t = (h - 9f) / 231f;
+            return Config.PASTURE.Lerp(Config.DRY_FIELD, t * t);
         }
-        else if (h < 330)
-        {
-            float t = (h - 240) / 90;                                       // scree
-            return Mix(120 / 255f, 112 / 255f, 84 / 255f,
-                       146 / 255f, 134 / 255f, 112 / 255f,
-                       t);
-        }
-        else if (h < 400)
-        {
-            float t = (h - 330) / 70;                                       // rock
-            return Mix(146 / 255f, 134 / 255f, 112 / 255f,
-                       168 / 255f, 164 / 255f, 156 / 255f,
-                       t);
-        }
-        else
-        {
-            float t = Mathf.Min(1, (h - 400) / 120);                        // snow
-            return Mix(206 / 255f, 210 / 255f, 216 / 255f,
-                       240 / 255f, 244 / 255f, 250 / 255f,
-                       t);
-        }
-    }
 
-    private static Color Mix(float r0, float g0, float b0, float r1, float g1, float b1, float t)
-    {
-        return new Color(r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t);
+        if (h < 330f)
+        {
+            float t = (h - 240f) / 90f;                                     // scree
+            return Config.SCREE_LOW.Lerp(Config.SCREE_HIGH, t);
+        }
+
+        if (h < 400f)
+        {
+            float t = (h - 330f) / 70f;                                     // rock
+            return Config.SCREE_HIGH.Lerp(Config.ROCK, t);
+        }
+
+        float snow = Mathf.Min(1, (h - 400f) / 120f);                       // snow
+        return Config.SNOW_LOW.Lerp(Config.SNOW_HIGH, snow);
     }
 }

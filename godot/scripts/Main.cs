@@ -23,14 +23,15 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
-        // Sky, haze fog and sun.
+        // Sky: deep blue zenith easing into a warm, light horizon.
         var skyMaterial = new ProceduralSkyMaterial
         {
-            SkyTopColor = new Color(0x08 / 255f, 0x21 / 255f, 0x3f / 255f),
-            SkyHorizonColor = new Color(0x79 / 255f, 0xa9 / 255f, 0xce / 255f),
-            GroundHorizonColor = Config.HAZE,
-            GroundBottomColor = new Color(0.55f, 0.62f, 0.68f),
-            SunAngleMax = 30f,
+            SkyTopColor = Config.SKY_TOP,
+            SkyHorizonColor = Config.SKY_HORIZON,
+            GroundHorizonColor = Config.SKY_HORIZON,
+            GroundBottomColor = Config.GROUND_BOTTOM,
+            SunAngleMax = Config.SUN_DISC_ANGLE,
+            SunCurve = Config.SUN_DISC_CURVE,
         };
         var sky = new Sky { SkyMaterial = skyMaterial };
 
@@ -38,14 +39,46 @@ public partial class Main : Node3D
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = sky,
-            // Distance haze that blends everything into the horizon colour,
-            // like the original renderer's fog factor.
+
+            // Lighting: one warm directional sun plus a cool blue ambient
+            // fill, so lit faces read warm and shade falls cool.
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = Config.AMBIENT_COLOR,
+            AmbientLightEnergy = Config.AMBIENT_ENERGY,
+            AmbientLightSkyContribution = 0f,
+
+            // Distance haze for depth only: starts far out, tinted toward the
+            // horizon sky rather than washing the world white.
             FogEnabled = true,
-            FogLightColor = Config.HAZE,
-            FogDensity = 0.00045f,
-            FogSkyAffect = 0f,
+            FogMode = Godot.Environment.FogModeEnum.Depth,
+            FogLightColor = Config.FOG_COLOR,
+            FogDepthBegin = Config.FOG_BEGIN,
+            FogDepthEnd = Config.FOG_END,
+            FogDepthCurve = Config.FOG_DEPTH_CURVE,
+            FogSkyAffect = Config.FOG_SKY_AFFECT,
+
+            // Mild filmic tone mapping plus a touch of contrast/saturation.
+            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            TonemapWhite = Config.TONEMAP_WHITE,
+            AdjustmentEnabled = true,
+            AdjustmentSaturation = Config.ADJUSTMENT_SATURATION,
+            AdjustmentContrast = Config.ADJUSTMENT_CONTRAST,
         };
         AddChild(new WorldEnvironment { Environment = environment });
+
+        // The sun itself, matching the direction the shading assumes
+        // (Config.SUN_DIR). Soft shadows out to the shadow distance.
+        var sun = new DirectionalLight3D
+        {
+            LightColor = Config.SUN_COLOR,
+            LightEnergy = Config.SUN_ENERGY,
+            ShadowEnabled = true,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
+            DirectionalShadowMaxDistance = Config.SUN_SHADOW_MAX_DISTANCE,
+            ShadowNormalBias = 2f,
+        };
+        AddChild(sun);
+        sun.LookAt(-Config.SUN_DIR);  // shine from the sun into the scene
 
         _camera = new Camera3D
         {
